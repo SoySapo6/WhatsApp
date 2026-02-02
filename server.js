@@ -17,6 +17,7 @@ const qrcode = require('qrcode');
 const cors = require('cors');
 const fs = require('fs');
 const mime = require('mime-types');
+const path = require('path');
 
 const store = makeInMemoryStore({ logger: console });
 store.readFromFile('./baileys_store_multi.json');
@@ -26,6 +27,8 @@ setInterval(() => {
 
 const app = express();
 app.use(cors());
+app.use(express.static(path.join(__dirname, 'dist')));
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] },
@@ -161,11 +164,11 @@ async function connectToWhatsApp() {
 connectToWhatsApp();
 
 io.on('connection', (socket) => {
-  
+
   if (sock?.user) {
       socket.emit('ready', {
           id: sock.user.id.split(':')[0] + '@s.whatsapp.net',
-          name: sock.user.name || 'Me' 
+          name: sock.user.name || 'Me'
       });
       const chats = store.chats.all().sort((a,b) => b.conversationTimestamp - a.conversationTimestamp);
       socket.emit('chats', chats.slice(0, 50));
@@ -182,7 +185,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('send_message', async ({ jid, text }) => {
-     try { await sock.sendMessage(jid, { text }); } 
+     try { await sock.sendMessage(jid, { text }); }
      catch (e) { console.error(e); }
   });
 
@@ -190,7 +193,7 @@ io.on('connection', (socket) => {
       try {
           const b64 = fileBase64.replace(/^data:.*?;base64,/, "");
           const buff = Buffer.from(b64, 'base64');
-          
+
           let messageContent = {};
 
           if (type === 'audio') {
@@ -234,7 +237,7 @@ io.on('connection', (socket) => {
 
   // --- WebRTC Signaling Logic ---
   // This allows calls between users connected to this web interface
-  
+
   socket.on("call_user", (data) => {
       // data: { userToCall, signalData, from }
       // Broadcast to all clients (in a real app, emit to specific socket ID)
@@ -261,8 +264,14 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
+
+// Catch-all to serve index.html for SPA
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
 server.listen(PORT, () => {
-    console.log(`Backend Server running on port ${PORT}`);
-    console.log(`Frontend should be running on http://localhost:3000`);
+    console.log(`Unified Server running on port ${PORT}`);
+    console.log(`Access the app at http://localhost:${PORT}`);
 });
