@@ -266,9 +266,9 @@ const App: React.FC = () => {
 
   if (viewState === ViewState.LOGIN || viewState === ViewState.CONNECTING) {
     return (
-        <Login
-            qrCode={qrCode}
-            status={connectionStatus}
+        <Login 
+            qrCode={qrCode} 
+            status={connectionStatus} 
             pairingCode={pairingCode}
             onRequestPairing={handleRequestPairing}
         />
