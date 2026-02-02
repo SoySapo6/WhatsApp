@@ -24,10 +24,10 @@ export const Login: React.FC<LoginProps> = ({ qrCode, status, pairingCode, onReq
         </div>
 
         {/* White Card */}
-        <div className="z-10 bg-white md:rounded-lg shadow-lg flex flex-col md:flex-row w-full md:w-[90%] max-w-[1000px] h-full md:h-auto md:min-h-[70vh] md:mt-24 overflow-hidden text-gray-800">
-            <div className="p-12 flex-1 flex flex-col justify-between hidden md:flex">
+        <div className="z-10 bg-white md:rounded-lg shadow-lg flex flex-col md:flex-row w-full md:w-[90%] max-w-[1000px] h-full md:h-auto md:min-h-[70vh] md:mt-12 overflow-y-auto md:overflow-hidden text-gray-800">
+            <div className="p-8 md:p-12 flex-1 flex flex-col justify-between hidden md:flex">
                 <div>
-                    <h1 className="text-3xl font-light mb-10 text-[#41525d]">Use WhatsApp on your computer</h1>
+                    <h1 className="text-2xl md:text-3xl font-light mb-6 md:mb-10 text-[#41525d]">Use WhatsApp on your computer</h1>
                     <ol className="list-decimal pl-6 space-y-4 text-lg text-[#3b4a54]">
                         <li>Open WhatsApp on your phone</li>
                         <li>Tap <strong>Menu</strong> <Icons.Menu className="inline w-4 h-4"/> or <strong>Settings</strong> and select <strong>Linked Devices</strong></li>
@@ -52,7 +52,7 @@ export const Login: React.FC<LoginProps> = ({ qrCode, status, pairingCode, onReq
                 )}
             </div>
             
-            <div className="flex-1 flex flex-col items-center justify-center p-6 md:p-12 border-l border-gray-100">
+            <div className="flex-1 flex flex-col items-center justify-center p-6 md:p-12 border-l border-gray-100 min-h-[500px]">
                 <div className="relative w-full flex flex-col items-center">
                     {!showPairing ? (
                         <div className="flex md:hidden text-[#00a884] font-medium mb-6 hover:underline cursor-pointer" onClick={() => setShowPairing(true)}>
