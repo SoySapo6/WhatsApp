@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { format } from 'date-fns';
 import { ViewState, ChatSession, Message, User, SideBarView, GroupMetadata } from './types';
 import { Login } from './components/Login';
 import { Sidebar } from './components/Sidebar';
@@ -22,11 +23,13 @@ const App: React.FC = () => {
   
   const [chats, setChats] = useState<ChatSession[]>([]);
   const [contacts, setContacts] = useState<User[]>([]);
-  const [statusUpdates, setStatusUpdates] = useState<any[]>([]);
+  const [statusUpdates, setStatusUpdates] = useState<Record<string, any[]>>({});
   const [presences, setPresences] = useState<Record<string, any>>({});
   const [currentUser, setCurrentUser] = useState<User>({ id: '', name: '', avatar: '' });
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
-  const [activeStatus, setActiveStatus] = useState<any>(null);
+  const [activeStatus, setActiveStatus] = useState<any[] | null>(null);
+  const [currentStatusIndex, setCurrentStatusIndex] = useState(0);
+  const [privacySettings, setPrivacySettings] = useState<Record<string, string>>({});
   
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [qrCode, setQrCode] = useState<string | null>(null);
@@ -84,6 +87,8 @@ const App: React.FC = () => {
       });
       setViewState(ViewState.MAIN);
       setConnectionStatus('Online');
+      socket.emit('fetch_my_status');
+      socket.emit('get_privacy_settings');
     });
 
     socket.on('contacts', (rawContacts: any[]) => {
@@ -122,18 +127,37 @@ const App: React.FC = () => {
     });
 
     socket.on('profile_pic', ({ jid, url }: { jid: string, url: string | null }) => {
+        const newAvatar = url || `https://ui-avatars.com/api/?name=${encodeURIComponent(jid)}&background=random&color=fff`;
+
         setChats(prev => prev.map(c =>
             c.id === jid ? {
                 ...c,
-                contact: {
-                    ...c.contact,
-                    avatar: url || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.contact.name)}&background=random&color=fff`
-                }
+                contact: { ...c.contact, avatar: newAvatar }
             } : c
         ));
-        if (currentUser.id === jid) {
-            setCurrentUser(prev => ({ ...prev, avatar: url || prev.avatar }));
-        }
+
+        setContacts(prev => prev.map(c =>
+            c.id === jid ? { ...c, avatar: newAvatar } : c
+        ));
+        // Use a ref-like check or compare with currentUser.id
+        setCurrentUser(prev => {
+            if (prev.id === jid) {
+                return { ...prev, avatar: url || prev.avatar };
+            }
+            return prev;
+        });
+    });
+
+    socket.on('profile_updated', (update: any) => {
+        setCurrentUser(prev => ({ ...prev, ...update }));
+    });
+
+    socket.on('my_status', (data: any) => {
+        setCurrentUser(prev => ({ ...prev, status: data?.status }));
+    });
+
+    socket.on('privacy_settings', (settings: any) => {
+        setPrivacySettings(settings);
     });
 
     socket.on('messages', ({ jid, messages }: { jid: string, messages: any[] }) => {
@@ -189,7 +213,11 @@ const App: React.FC = () => {
     
     socket.on('status_update', (payload) => {
          const msg = normalizeMessage(payload);
-         setStatusUpdates(prev => [msg, ...prev]);
+         const jid = msg.key.participant || msg.key.remoteJid;
+         setStatusUpdates(prev => ({
+             ...prev,
+             [jid]: [msg, ...(prev[jid] || [])].sort((a,b) => b.timestamp - a.timestamp)
+         }));
     });
 
     socket.on('group_info', (metadata: GroupMetadata) => {
@@ -278,6 +306,16 @@ const App: React.FC = () => {
       socket.emit('request_pairing_code', phone);
   };
 
+  const handleUpdateProfile = (data: { name?: string, status?: string, photo?: string }) => {
+      if (data.name) socket.emit('update_profile_name', data.name);
+      if (data.status) socket.emit('update_profile_status', data.status);
+      if (data.photo) socket.emit('update_profile_pic', data.photo);
+  };
+
+  const handleUpdatePrivacy = (type: string, value: string) => {
+      socket.emit('update_privacy_setting', { type, value });
+  };
+
   const handleNewChat = (phone: string) => {
       const jid = phone.replace(/\D/g, '') + '@s.whatsapp.net';
       const chatExists = chats.find(c => c.id === jid);
@@ -364,6 +402,20 @@ const App: React.FC = () => {
 
   const activeChat = chats.find(c => c.id === activeChatId);
 
+  const handleViewStatus = (statuses: any[]) => {
+      setActiveStatus(statuses);
+      setCurrentStatusIndex(0);
+  };
+
+  const nextStatus = () => {
+      if (!activeStatus) return;
+      if (currentStatusIndex < activeStatus.length - 1) {
+          setCurrentStatusIndex(currentStatusIndex + 1);
+      } else {
+          setActiveStatus(null);
+      }
+  };
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#111b21]">
       <div className="container mx-auto max-w-[1700px] h-full flex shadow-lg relative">
@@ -384,7 +436,10 @@ const App: React.FC = () => {
             onSelectChat={handleSelectChat}
             onUploadStatus={handleUploadStatus}
             onNewChat={handleNewChat}
-            onViewStatus={setActiveStatus}
+            onViewStatus={handleViewStatus}
+            onUpdateProfile={handleUpdateProfile}
+            privacySettings={privacySettings}
+            onUpdatePrivacy={handleUpdatePrivacy}
           />
         </div>
 
@@ -448,34 +503,66 @@ const App: React.FC = () => {
           )}
 
           {activeStatus && (
-              <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-10">
+              <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-10" onClick={nextStatus}>
                   <button
-                    onClick={() => setActiveStatus(null)}
-                    className="absolute top-10 right-10 text-white hover:text-gray-300"
+                    onClick={(e) => { e.stopPropagation(); setActiveStatus(null); }}
+                    className="absolute top-10 right-10 text-white hover:text-gray-300 z-50"
                   >
                       <Icons.Close className="w-8 h-8" />
                   </button>
-                  <div className="max-w-2xl w-full h-full flex flex-col items-center justify-center">
-                      <div className="w-full mb-4 flex items-center gap-4">
+
+                  <div className="absolute top-4 left-1/2 -translate-x-1/2 w-full max-w-md flex gap-1 px-4">
+                      {activeStatus.map((_, i) => (
+                          <div key={i} className="h-1 flex-1 bg-white/20 rounded-full overflow-hidden">
+                              <div className={`h-full bg-white transition-all duration-300 ${i <= currentStatusIndex ? 'w-full' : 'w-0'}`} />
+                          </div>
+                      ))}
+                  </div>
+
+                  <div className="max-w-2xl w-full h-full flex flex-col items-center justify-center relative" onClick={e => e.stopPropagation()}>
+                      <div className="absolute top-10 left-0 w-full mb-4 flex items-center gap-4 px-4 z-10">
                           <div className="w-10 h-10 rounded-full border border-white p-0.5 overflow-hidden">
-                              <img src="https://via.placeholder.com/50" className="w-full h-full object-cover" />
+                              <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(activeStatus[currentStatusIndex].pushName || 'User')}`} className="w-full h-full object-cover" />
                           </div>
                           <div>
-                              <p className="text-white font-medium">{activeStatus.pushName || 'Unknown User'}</p>
+                              <p className="text-white font-medium">{activeStatus[currentStatusIndex].pushName || 'Unknown User'}</p>
+                              <p className="text-white/60 text-xs">{format(activeStatus[currentStatusIndex].timestamp, 'HH:mm')}</p>
                           </div>
                       </div>
-                      <div className="flex-1 w-full bg-[#111b21] flex items-center justify-center rounded-xl overflow-hidden shadow-2xl border border-white/10">
-                          {activeStatus.type === 'video' ? (
-                              <video src={activeStatus.mediaUrl} controls autoPlay className="max-w-full max-h-full" />
+
+                      <div className="flex-1 w-full bg-[#111b21] flex items-center justify-center rounded-xl overflow-hidden shadow-2xl border border-white/10 relative">
+                          {activeStatus[currentStatusIndex].type === 'video' ? (
+                              <video src={activeStatus[currentStatusIndex].mediaUrl} controls autoPlay className="max-w-full max-h-full" />
+                          ) : activeStatus[currentStatusIndex].mediaUrl ? (
+                              <img src={activeStatus[currentStatusIndex].mediaUrl} className="max-w-full max-h-full object-contain" />
                           ) : (
-                              <img src={activeStatus.mediaUrl} className="max-w-full max-h-full object-contain" />
+                              <div className="w-full h-full flex items-center justify-center bg-wa-outgoing p-10 text-center text-2xl font-medium">
+                                  {activeStatus[currentStatusIndex].text}
+                              </div>
                           )}
                       </div>
-                      {activeStatus.text && (
-                          <div className="mt-6 text-white text-center text-lg bg-black/40 px-6 py-3 rounded-full backdrop-blur-md">
-                              {activeStatus.text}
+
+                      {activeStatus[currentStatusIndex].text && activeStatus[currentStatusIndex].mediaUrl && (
+                          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 text-white text-center text-lg bg-black/40 px-6 py-3 rounded-xl backdrop-blur-md max-w-[90%]">
+                              {activeStatus[currentStatusIndex].text}
                           </div>
                       )}
+
+                      <button
+                        className="absolute left-[-60px] top-1/2 -translate-y-1/2 text-white/50 hover:text-white hidden md:block"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (currentStatusIndex > 0) setCurrentStatusIndex(currentStatusIndex - 1);
+                        }}
+                      >
+                          <Icons.Back className="w-10 h-10" />
+                      </button>
+                      <button
+                        className="absolute right-[-60px] top-1/2 -translate-y-1/2 text-white/50 hover:text-white hidden md:block"
+                        onClick={(e) => { e.stopPropagation(); nextStatus(); }}
+                      >
+                          <Icons.Back className="w-10 h-10 rotate-180" />
+                      </button>
                   </div>
               </div>
           )}

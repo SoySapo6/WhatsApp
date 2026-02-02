@@ -19,7 +19,9 @@ import {
   Trash2,
   ShieldAlert,
   LogOut,
-  Plus
+  Plus,
+  Pencil,
+  Settings
 } from 'lucide-react';
 
 export const Icons = {
@@ -42,5 +44,7 @@ export const Icons = {
   Trash: Trash2,
   Shield: ShieldAlert,
   Logout: LogOut,
-  Plus
+  Plus,
+  Edit: Pencil,
+  Settings
 };

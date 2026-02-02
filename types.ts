@@ -58,7 +58,9 @@ export enum SideBarView {
   STATUS,
   CHANNELS,
   COMMUNITIES,
-  NEW_CHAT
+  NEW_CHAT,
+  PROFILE,
+  SETTINGS
 }
 
 export interface Presence {
