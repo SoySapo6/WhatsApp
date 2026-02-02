@@ -17,6 +17,7 @@ const qrcode = require('qrcode');
 const cors = require('cors');
 const fs = require('fs');
 const mime = require('mime-types');
+const path = require('path');
 
 const store = makeInMemoryStore({ logger: console });
 store.readFromFile('./baileys_store_multi.json');
@@ -26,6 +27,8 @@ setInterval(() => {
 
 const app = express();
 app.use(cors());
+app.use(express.static(path.join(__dirname, 'dist')));
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] },
@@ -261,8 +264,14 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
+
+// Catch-all to serve index.html for SPA
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
 server.listen(PORT, () => {
-    console.log(`Backend Server running on port ${PORT}`);
-    console.log(`Frontend should be running on http://localhost:3000`);
+    console.log(`Unified Server running on port ${PORT}`);
+    console.log(`Access the app at http://localhost:${PORT}`);
 });

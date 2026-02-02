@@ -5,10 +5,10 @@ interface LoginProps {
   qrCode: string | null;
   status: string;
   pairingCode?: string | null;
-  onLanguageRequestPairing?: (phone: string) => void;
+  onRequestPairing?: (phone: string) => void;
 }
 
-export const Login: React.FC<LoginProps> = ({ qrCode, status, pairingCode, onLanguageRequestPairing }) => {
+export const Login: React.FC<LoginProps> = ({ qrCode, status, pairingCode, onRequestPairing }) => {
   const [phone, setPhone] = React.useState('');
   const [showPairing, setShowPairing] = React.useState(false);
 
@@ -78,7 +78,7 @@ export const Login: React.FC<LoginProps> = ({ qrCode, status, pairingCode, onLan
                                     />
                                     <button
                                         className="w-full bg-[#00a884] text-white p-2 rounded text-sm font-medium hover:bg-[#009677] transition-colors"
-                                        onClick={() => onLanguageRequestPairing?.(phone)}
+                                        onClick={() => onRequestPairing?.(phone)}
                                     >
                                         Next
                                     </button>

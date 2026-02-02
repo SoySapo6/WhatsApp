@@ -7,7 +7,6 @@ import { GroupInfo } from './components/GroupInfo';
 import { CallModal } from './components/CallModal';
 import { socket, normalizeMessage } from './services/socket';
 import { Icons } from './components/Icons';
-import { getGeminiReply } from './services/geminiService';
 
 // WebRTC Configuration
 const rtcConfig = {
@@ -96,31 +95,6 @@ const App: React.FC = () => {
     socket.on('message', async (payload: any) => {
       const msg = normalizeMessage(payload);
       const chatId = msg.key.remoteJid;
-
-      // --- Gemini AI Auto Reply Logic ---
-      if (chatId === 'gemini' && !msg.key.fromMe) {
-          const reply = await getGeminiReply(msg.text);
-          const aiMsg: Message = {
-              id: 'ai-' + Date.now(),
-              key: { remoteJid: 'gemini', fromMe: true, id: 'ai-' + Date.now() },
-              text: reply,
-              senderId: 'me',
-              timestamp: Date.now(),
-              status: 'sent',
-              type: 'text'
-          };
-
-          setChats(prev => prev.map(c => {
-              if (c.id === 'gemini') {
-                  return {
-                      ...c,
-                      messages: [...c.messages, aiMsg],
-                      lastMessageTime: aiMsg.timestamp
-                  };
-              }
-              return c;
-          }));
-      }
 
       setChats(prevChats => {
         const chatExists = prevChats.find(c => c.id === chatId);
@@ -221,30 +195,6 @@ const App: React.FC = () => {
 
   const handleSendMessage = useCallback(async (chatId: string, text: string) => {
     socket.emit('send_message', { jid: chatId, text });
-
-    // Mock Gemini reply if chatting with gemini
-    if (chatId === 'gemini') {
-        const reply = await getGeminiReply(text);
-        const aiMsg: Message = {
-            id: 'ai-' + Date.now(),
-            key: { remoteJid: 'gemini', fromMe: false, id: 'ai-' + Date.now() },
-            text: reply,
-            senderId: 'gemini',
-            timestamp: Date.now(),
-            status: 'read',
-            type: 'text'
-        };
-        setChats(prev => prev.map(c => {
-            if (c.id === 'gemini') {
-                return {
-                    ...c,
-                    messages: [...c.messages, aiMsg],
-                    lastMessageTime: aiMsg.timestamp
-                };
-            }
-            return c;
-        }));
-    }
   }, []);
 
   const handleSendImage = useCallback((chatId: string, base64: string, caption: string, type: 'image'|'video') => {
@@ -320,7 +270,7 @@ const App: React.FC = () => {
             qrCode={qrCode}
             status={connectionStatus}
             pairingCode={pairingCode}
-            onLanguageRequestPairing={handleRequestPairing}
+            onRequestPairing={handleRequestPairing}
         />
     );
   }
