@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 interface SidebarProps {
   currentUser: User;
   chats: ChatSession[];
+  contacts: User[];
   statusUpdates: any[];
   activeChatId: string | null;
   presences: Record<string, any>;
@@ -13,10 +14,14 @@ interface SidebarProps {
   onSelectChat: (id: string) => void;
   onChangeView: (view: SideBarView) => void;
   onUploadStatus: (file: string, type: 'image'|'video') => void;
+  onNewChat: (phone: string) => void;
+  onViewStatus: (status: any) => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentUser, chats, statusUpdates, activeChatId, presences, currentView, onSelectChat, onChangeView, onUploadStatus }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ currentUser, chats, contacts, statusUpdates, activeChatId, presences, currentView, onSelectChat, onChangeView, onUploadStatus, onNewChat, onViewStatus }) => {
   const statusInputRef = useRef<HTMLInputElement>(null);
+  const [newChatPhone, setNewChatPhone] = React.useState('');
+  const [searchTerm, setSearchTerm] = React.useState('');
 
   const handleStatusFile = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -47,8 +52,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentUser, chats, statusUpda
             <button title="Channels" onClick={() => onChangeView(SideBarView.CHANNELS)}>
                 <Icons.Chat className={`w-6 h-6 ${currentView === SideBarView.CHANNELS ? 'text-[#00a884]' : ''}`} />
             </button>
-             <button title="New Chat" onClick={() => onChangeView(SideBarView.CHATS)}>
-                <Icons.Plus className="w-6 h-6" />
+             <button title="New Chat" onClick={() => onChangeView(SideBarView.NEW_CHAT)}>
+                <Icons.Plus className={`w-6 h-6 ${currentView === SideBarView.NEW_CHAT ? 'text-[#00a884]' : ''}`} />
             </button>
             <Icons.Menu className="w-6 h-6 cursor-pointer" />
         </div>
@@ -56,6 +61,64 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentUser, chats, statusUpda
   );
 
   const renderContent = () => {
+    if (currentView === SideBarView.NEW_CHAT) {
+        return (
+            <div className="text-[#e9edef] h-full flex flex-col">
+                <div className="h-[108px] bg-wa-header flex items-end px-6 pb-4 shrink-0">
+                    <div className="flex items-center gap-6">
+                        <button onClick={() => onChangeView(SideBarView.CHATS)} className="text-[#aebac1] hover:text-white">
+                            <Icons.Back className="w-6 h-6" />
+                        </button>
+                        <h2 className="text-xl font-medium">New Chat</h2>
+                    </div>
+                </div>
+
+                <div className="p-4 bg-[#111b21] shrink-0">
+                    <div className="bg-[#202c33] rounded-lg p-3 flex flex-col gap-4">
+                        <p className="text-sm text-[#8696a0]">Enter the phone number with country code to start a chat.</p>
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                value={newChatPhone}
+                                onChange={(e) => setNewChatPhone(e.target.value)}
+                                placeholder="e.g. 5491122334455"
+                                className="flex-1 bg-transparent border-b border-[#00a884] text-[#e9edef] py-1 focus:outline-none placeholder-[#8696a0]"
+                            />
+                            <button
+                                onClick={() => {
+                                    if (newChatPhone.trim()) {
+                                        onNewChat(newChatPhone);
+                                        setNewChatPhone('');
+                                    }
+                                }}
+                                className="bg-[#00a884] text-[#111b21] px-4 py-1 rounded font-medium hover:bg-[#009677] transition-colors"
+                            >
+                                Start
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                    <div className="px-6 py-4 text-[#00a884] text-sm uppercase font-medium">Contacts on WhatsApp</div>
+                    {contacts.filter(c => !c.id.includes('@g.us')).map(contact => (
+                        <div
+                            key={contact.id}
+                            onClick={() => onNewChat(contact.id)}
+                            className="flex items-center px-6 py-3 cursor-pointer hover:bg-[#202c33] transition-colors"
+                        >
+                            <img src={contact.avatar} className="w-12 h-12 rounded-full object-cover" />
+                            <div className="ml-4 border-b border-wa-border flex-1 pb-3">
+                                <p className="text-[#e9edef] text-lg font-normal">{contact.name}</p>
+                                <p className="text-[#8696a0] text-sm truncate">{contact.id.split('@')[0]}</p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )
+    }
+
     if (currentView === SideBarView.STATUS) {
         return (
             <div className="p-4 text-[#e9edef]">
@@ -73,7 +136,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentUser, chats, statusUpda
                 </div>
                 <div className="text-[#8696a0] text-sm uppercase font-medium mb-4">Recent updates</div>
                 {statusUpdates.map((status, i) => (
-                    <div key={i} className="flex items-center gap-4 py-3 cursor-pointer">
+                    <div key={i} className="flex items-center gap-4 py-3 cursor-pointer" onClick={() => onViewStatus(status)}>
                         <div className="w-10 h-10 rounded-full border-2 border-[#00a884] p-0.5 overflow-hidden">
                             {status.type === 'video' ? (
                                 <video src={status.mediaUrl} className="w-full h-full object-cover" />
@@ -98,6 +161,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentUser, chats, statusUpda
                 <Icons.Search className="w-4 h-4 text-[#8696a0] min-w-[16px]" />
                 <input 
                     type="text" 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
                     placeholder="Search or start new chat" 
                     className="bg-transparent text-[#d1d7db] text-sm w-full focus:outline-none placeholder-[#8696a0]"
                 />
@@ -105,7 +170,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentUser, chats, statusUpda
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {chats.map((chat) => {
+            {chats.filter(c =>
+                c.contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                c.id.includes(searchTerm)
+            ).map((chat) => {
                 const lastMsg = chat.messages[chat.messages.length - 1];
                 return (
                     <div 
