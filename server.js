@@ -1,5 +1,6 @@
+const Baileys = require('@whiskeysockets/baileys');
+const makeWASocket = Baileys.default || Baileys;
 const { 
-  default: makeWASocket, 
   useMultiFileAuthState, 
   DisconnectReason, 
   fetchLatestBaileysVersion, 
@@ -7,7 +8,7 @@ const {
   getContentType,
   downloadContentFromMessage,
   isJidBroadcast
-} = require('@whiskeysockets/baileys');
+} = Baileys;
 const { Boom } = require('@hapi/boom');
 const express = require('express');
 const http = require('http');
@@ -114,7 +115,7 @@ async function connectToWhatsApp() {
       };
       io.emit('ready', user);
       
-      const chats = Object.values(store.chats).map(chat => ({
+      const chats = store.chats.all().map(chat => ({
          ...chat,
          name: chat.name || chat.subject || chat.id.replace('@s.whatsapp.net', '')
       }));
@@ -162,9 +163,19 @@ async function connectToWhatsApp() {
             id: sock.user.id.split(':')[0] + '@s.whatsapp.net',
             name: sock.user.name || 'Me' 
         });
-        const chats = Object.values(store.chats).sort((a,b) => b.conversationTimestamp - a.conversationTimestamp);
+        const chats = store.chats.all().sort((a,b) => b.conversationTimestamp - a.conversationTimestamp);
         socket.emit('chats', chats.slice(0, 50));
     }
+
+    socket.on('request_pairing_code', async (phoneNumber) => {
+        try {
+            const code = await sock.requestPairingCode(phoneNumber);
+            socket.emit('pairing_code', code);
+        } catch (e) {
+            console.error('Error requesting pairing code', e);
+            socket.emit('error', 'Could not request pairing code');
+        }
+    });
 
     socket.on('send_message', async ({ jid, text }) => {
        try { await sock.sendMessage(jid, { text }); } 

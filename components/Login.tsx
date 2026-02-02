@@ -4,9 +4,14 @@ import { Icons } from './Icons';
 interface LoginProps {
   qrCode: string | null;
   status: string;
+  pairingCode?: string | null;
+  onLanguageRequestPairing?: (phone: string) => void;
 }
 
-export const Login: React.FC<LoginProps> = ({ qrCode, status }) => {
+export const Login: React.FC<LoginProps> = ({ qrCode, status, pairingCode, onLanguageRequestPairing }) => {
+  const [phone, setPhone] = React.useState('');
+  const [showPairing, setShowPairing] = React.useState(false);
+
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-[#111b21] text-[#e9edef] relative overflow-hidden">
         {/* Green Header Strip */}
@@ -30,30 +35,77 @@ export const Login: React.FC<LoginProps> = ({ qrCode, status }) => {
                         <li>Point your phone to this screen to capture the code</li>
                     </ol>
                 </div>
-                <div className="text-[#00a884] font-medium mt-8 hover:underline cursor-pointer">
-                    Link with phone number
-                </div>
+                {!showPairing ? (
+                    <div
+                        className="text-[#00a884] font-medium mt-8 hover:underline cursor-pointer"
+                        onClick={() => setShowPairing(true)}
+                    >
+                        Link with phone number
+                    </div>
+                ) : (
+                    <div
+                        className="text-[#00a884] font-medium mt-8 hover:underline cursor-pointer"
+                        onClick={() => setShowPairing(false)}
+                    >
+                        Use QR Code instead
+                    </div>
+                )}
             </div>
             
             <div className="flex-1 flex flex-col items-center justify-center p-12 border-l border-gray-100">
-                <div className="relative">
-                    {qrCode ? (
-                         <img 
-                            src={qrCode} 
-                            alt="Scan QR Code" 
-                            className="w-64 h-64 border-4 border-white shadow-sm"
-                        />
-                    ) : (
-                        <div className="w-64 h-64 flex items-center justify-center bg-gray-100 border border-gray-200">
-                            {status === 'Connected to server' ? (
-                                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#00a884]"></div>
+                <div className="relative w-full flex flex-col items-center">
+                    {showPairing ? (
+                        <div className="w-64 h-64 flex flex-col items-center justify-center bg-gray-50 border border-gray-200 p-4 rounded-lg">
+                            {pairingCode ? (
+                                <div className="text-center">
+                                    <p className="text-xs text-gray-500 mb-2 uppercase tracking-widest">Your Pairing Code</p>
+                                    <div className="flex gap-1 justify-center">
+                                        {pairingCode.split('').map((char, i) => (
+                                            <span key={i} className="text-2xl font-mono font-bold border-b-2 border-[#00a884] px-1">{char}</span>
+                                        ))}
+                                    </div>
+                                    <p className="mt-4 text-[10px] text-gray-400">Enter this code on your phone</p>
+                                </div>
                             ) : (
-                                <div className="text-center text-gray-500 px-4">
-                                    <p className="mb-2 font-bold text-red-500">Backend Disconnected</p>
-                                    <p className="text-xs">Run 'node server.js' locally</p>
+                                <div className="w-full">
+                                    <p className="text-xs text-gray-500 mb-2">Enter phone number with country code</p>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. 1234567890"
+                                        className="w-full p-2 border rounded mb-3 text-sm outline-none focus:border-[#00a884]"
+                                        value={phone}
+                                        onChange={(e) => setPhone(e.target.value)}
+                                    />
+                                    <button
+                                        className="w-full bg-[#00a884] text-white p-2 rounded text-sm font-medium hover:bg-[#009677] transition-colors"
+                                        onClick={() => onLanguageRequestPairing?.(phone)}
+                                    >
+                                        Next
+                                    </button>
                                 </div>
                             )}
                         </div>
+                    ) : (
+                        <>
+                            {qrCode ? (
+                                <img
+                                    src={qrCode}
+                                    alt="Scan QR Code"
+                                    className="w-64 h-64 border-4 border-white shadow-sm"
+                                />
+                            ) : (
+                                <div className="w-64 h-64 flex items-center justify-center bg-gray-100 border border-gray-200">
+                                    {status === 'Connected to server' ? (
+                                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#00a884]"></div>
+                                    ) : (
+                                        <div className="text-center text-gray-500 px-4">
+                                            <p className="mb-2 font-bold text-red-500">Backend Disconnected</p>
+                                            <p className="text-xs">Run 'node server.js' locally</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </>
                     )}
                    
                     {qrCode && (

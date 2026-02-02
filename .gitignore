@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+auth_info_baileys
+baileys_store_multi.json
+*.log
+package-lock.json
+.DS_Store
