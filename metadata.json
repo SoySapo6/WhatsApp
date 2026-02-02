@@ -1,0 +1,5 @@
+{
+  "name": "WhatsApp Web Real",
+  "description": "A fully functional WhatsApp Web client using a Node.js backend (Baileys) and Socket.io for real-time communication. Supports QR auth, chat lists, and messaging.",
+  "requestFramePermissions": []
+}

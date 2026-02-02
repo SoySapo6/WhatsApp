@@ -1,0 +1,46 @@
+import React from 'react';
+import { 
+  MessageSquare, 
+  MoreVertical, 
+  Search, 
+  Phone, 
+  Video, 
+  Paperclip, 
+  Mic, 
+  Smile, 
+  Check, 
+  CheckCheck,
+  ArrowLeft,
+  SendHorizontal,
+  Users,
+  CircleDashed,
+  Image,
+  X,
+  Trash2,
+  ShieldAlert,
+  LogOut,
+  Plus
+} from 'lucide-react';
+
+export const Icons = {
+  Chat: MessageSquare,
+  Menu: MoreVertical,
+  Search,
+  Phone,
+  Video,
+  Attach: Paperclip,
+  Mic,
+  Emoji: Smile,
+  Check,
+  DoubleCheck: CheckCheck,
+  Back: ArrowLeft,
+  Send: SendHorizontal,
+  Users,
+  Status: CircleDashed,
+  Image,
+  Close: X,
+  Trash: Trash2,
+  Shield: ShieldAlert,
+  Logout: LogOut,
+  Plus
+};

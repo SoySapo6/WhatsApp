@@ -1,0 +1,19 @@
+{
+  "name": "whatsapp-web-clone-backend",
+  "version": "1.0.0",
+  "description": "Backend for WhatsApp Web Clone",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.6.0",
+    "@hapi/boom": "^10.0.1",
+    "socket.io": "^4.7.4",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "qrcode": "^1.5.3",
+    "mime-types": "^2.1.35",
+    "pino": "^8.19.0"
+  }
+}
