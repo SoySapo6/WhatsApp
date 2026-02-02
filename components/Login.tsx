@@ -24,7 +24,7 @@ export const Login: React.FC<LoginProps> = ({ qrCode, status, pairingCode, onReq
         </div>
 
         {/* White Card */}
-        <div className="z-10 bg-white rounded-lg shadow-lg flex w-[90%] max-w-[1000px] h-[70vh] mt-24 overflow-hidden text-gray-800">
+        <div className="z-10 bg-white md:rounded-lg shadow-lg flex flex-col md:flex-row w-full md:w-[90%] max-w-[1000px] h-full md:h-auto md:min-h-[70vh] md:mt-24 overflow-hidden text-gray-800">
             <div className="p-12 flex-1 flex flex-col justify-between hidden md:flex">
                 <div>
                     <h1 className="text-3xl font-light mb-10 text-[#41525d]">Use WhatsApp on your computer</h1>
@@ -52,10 +52,20 @@ export const Login: React.FC<LoginProps> = ({ qrCode, status, pairingCode, onReq
                 )}
             </div>
             
-            <div className="flex-1 flex flex-col items-center justify-center p-12 border-l border-gray-100">
+            <div className="flex-1 flex flex-col items-center justify-center p-6 md:p-12 border-l border-gray-100">
                 <div className="relative w-full flex flex-col items-center">
+                    {!showPairing ? (
+                        <div className="flex md:hidden text-[#00a884] font-medium mb-6 hover:underline cursor-pointer" onClick={() => setShowPairing(true)}>
+                            Link with phone number
+                        </div>
+                    ) : (
+                        <div className="flex md:hidden text-[#00a884] font-medium mb-6 hover:underline cursor-pointer" onClick={() => setShowPairing(false)}>
+                            Use QR Code instead
+                        </div>
+                    )}
+
                     {showPairing ? (
-                        <div className="w-64 h-64 flex flex-col items-center justify-center bg-gray-50 border border-gray-200 p-4 rounded-lg">
+                        <div className="w-full max-w-xs md:w-64 h-64 flex flex-col items-center justify-center bg-gray-50 border border-gray-200 p-4 rounded-lg">
                             {pairingCode ? (
                                 <div className="text-center">
                                     <p className="text-xs text-gray-500 mb-2 uppercase tracking-widest">Your Pairing Code</p>
@@ -91,10 +101,10 @@ export const Login: React.FC<LoginProps> = ({ qrCode, status, pairingCode, onReq
                                 <img 
                                     src={qrCode} 
                                     alt="Scan QR Code" 
-                                    className="w-64 h-64 border-4 border-white shadow-sm"
+                                    className="w-full max-w-[256px] aspect-square border-4 border-white shadow-sm"
                                 />
                             ) : (
-                                <div className="w-64 h-64 flex items-center justify-center bg-gray-100 border border-gray-200">
+                                <div className="w-full max-w-[256px] aspect-square flex items-center justify-center bg-gray-100 border border-gray-200">
                                     {status === 'Connected to server' ? (
                                         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#00a884]"></div>
                                     ) : (

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChatSession, Presence } from '../types';
 import { Icons } from './Icons';
 import { MessageBubble } from './MessageBubble';
+import { socket } from '../services/socket';
 
 interface ChatWindowProps {
   chat: ChatSession;
@@ -30,6 +31,17 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ chat, onBack, onSendMess
   useEffect(() => {
     scrollToBottom();
   }, [chat.messages]);
+
+  useEffect(() => {
+    if (inputText.length > 0) {
+      const timeout = setTimeout(() => {
+        socket.emit('send_presence', { jid: chat.id, presence: 'composing' });
+      }, 300);
+      return () => clearTimeout(timeout);
+    } else {
+      socket.emit('send_presence', { jid: chat.id, presence: 'paused' });
+    }
+  }, [inputText, chat.id]);
 
   const handleSend = async () => {
     if (!inputText.trim()) return;
@@ -141,10 +153,35 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ chat, onBack, onSendMess
 
       <div className="min-h-[62px] bg-wa-header px-4 py-2 flex items-end gap-3 shrink-0 z-10 border-l border-wa-border relative">
         {showAttach && (
-            <div className="absolute bottom-16 left-2 bg-[#233138] rounded-xl py-2 shadow-lg flex flex-col gap-2 p-4">
+            <div className="absolute bottom-16 left-2 bg-[#233138] rounded-xl py-2 shadow-lg flex flex-col gap-2 p-4 min-w-[200px] z-50">
                 <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-3 p-2 hover:bg-[#182229] rounded-lg text-[#e9edef]">
                     <Icons.Image className="w-6 h-6 text-[#ac44cf]" />
                     <span>Photos & Videos</span>
+                </button>
+                <button onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt';
+                    input.onchange = (e: any) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                                socket.emit('send_media', {
+                                    jid: chat.id,
+                                    fileBase64: reader.result as string,
+                                    type: 'document',
+                                    fileName: file.name
+                                });
+                            };
+                            reader.readAsDataURL(file);
+                        }
+                    };
+                    input.click();
+                    setShowAttach(false);
+                }} className="flex items-center gap-3 p-2 hover:bg-[#182229] rounded-lg text-[#e9edef]">
+                    <Icons.File className="w-6 h-6 text-[#5f66cd]" />
+                    <span>Document</span>
                 </button>
                 <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={handleFileSelect} />
             </div>

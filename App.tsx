@@ -350,7 +350,8 @@ const App: React.FC = () => {
 
   // --- Call Logic ---
   const startCall = async (isVideo: boolean) => {
-      if (!activeChatId) return;
+      const targetJid = activeCall?.remoteUser || activeChatId;
+      if (!targetJid) return;
 
       try {
           const stream = await navigator.mediaDevices.getUserMedia({ video: isVideo, audio: true });
@@ -359,16 +360,16 @@ const App: React.FC = () => {
               isActive: true,
               isIncoming: false,
               isVideo,
-              remoteUser: activeChatId,
+              remoteUser: targetJid,
               localStream: stream
           });
 
           // Signaling Logic would go here (Create Offer)
-          // For now, we simulate the local experience of starting a call
           socket.emit('call_user', {
-              userToCall: activeChatId,
-              signalData: { type: 'offer', sdp: 'dummy-sdp' }, // In real app, use PC.createOffer()
-              from: currentUser.id
+              userToCall: targetJid,
+              signalData: { type: 'offer', sdp: 'dummy-sdp' },
+              from: currentUser.id,
+              toJid: targetJid
           });
 
       } catch (err) {
@@ -417,8 +418,8 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#111b21]">
-      <div className="container mx-auto max-w-[1700px] h-full flex shadow-lg relative">
+    <div className="flex h-screen w-screen overflow-hidden bg-[#111b21] md:p-4">
+      <div className="w-full max-w-[1600px] mx-auto h-full flex shadow-lg relative bg-[#111b21] overflow-hidden">
         
         <div className={`
             w-full md:w-[400px] flex-shrink-0 h-full bg-[#111b21] z-20 transition-all duration-300
@@ -444,7 +445,7 @@ const App: React.FC = () => {
         </div>
 
         <div className={`
-            flex-1 h-full bg-[#222e35] relative flex
+            flex-1 h-full bg-[#222e35] relative flex flex-col
             ${!activeChatId ? 'hidden md:flex' : 'flex'}
         `}>
           {activeChat ? (
@@ -463,18 +464,6 @@ const App: React.FC = () => {
                     presence={presences[activeChat.id]}
                 />
                 
-                {/* Full Featured Call Modal */}
-                {activeCall && activeCall.isActive && (
-                    <CallModal 
-                        contactName={activeChat.contact.name}
-                        contactAvatar={activeChat.contact.avatar}
-                        isVideo={activeCall.isVideo}
-                        isIncoming={activeCall.isIncoming}
-                        onEndCall={endCall}
-                        stream={activeCall.localStream}
-                        onAnswer={() => { /* Logic to answer and get local stream */ }}
-                    />
-                )}
              </div>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center border-b-[6px] border-[#00a884] bg-[#222e35] text-[#e9edef]">
@@ -499,6 +488,22 @@ const App: React.FC = () => {
                 onClose={() => setShowGroupInfo(false)} 
                 currentUserJid={currentUser.id}
                 onAction={handleGroupAction}
+              />
+          )}
+
+          {/* Call Modal - Global */}
+          {activeCall && activeCall.isActive && (
+              <CallModal
+                  contactName={chats.find(c => c.id === activeCall.remoteUser)?.contact.name || activeCall.remoteUser || 'Unknown'}
+                  contactAvatar={chats.find(c => c.id === activeCall.remoteUser)?.contact.avatar || ''}
+                  isVideo={activeCall.isVideo}
+                  isIncoming={activeCall.isIncoming}
+                  onEndCall={endCall}
+                  stream={activeCall.localStream}
+                  onAnswer={() => {
+                      // Logic to answer: would involve getting local stream and sending signal
+                      startCall(activeCall.isVideo);
+                  }}
               />
           )}
 
