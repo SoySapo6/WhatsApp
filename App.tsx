@@ -85,7 +85,7 @@ const App: React.FC = () => {
         isGroup: c.id.includes('@g.us')
       }));
       setChats(formattedChats);
-
+      
       // Auto select first chat if none active and we just connected
       if (!activeChatId && formattedChats.length > 0) {
           setActiveChatId(formattedChats[0].id);

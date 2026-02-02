@@ -164,11 +164,11 @@ async function connectToWhatsApp() {
 connectToWhatsApp();
 
 io.on('connection', (socket) => {
-
+  
   if (sock?.user) {
       socket.emit('ready', {
           id: sock.user.id.split(':')[0] + '@s.whatsapp.net',
-          name: sock.user.name || 'Me'
+          name: sock.user.name || 'Me' 
       });
       const chats = store.chats.all().sort((a,b) => b.conversationTimestamp - a.conversationTimestamp);
       socket.emit('chats', chats.slice(0, 50));
@@ -185,7 +185,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('send_message', async ({ jid, text }) => {
-     try { await sock.sendMessage(jid, { text }); }
+     try { await sock.sendMessage(jid, { text }); } 
      catch (e) { console.error(e); }
   });
 
@@ -193,7 +193,7 @@ io.on('connection', (socket) => {
       try {
           const b64 = fileBase64.replace(/^data:.*?;base64,/, "");
           const buff = Buffer.from(b64, 'base64');
-
+          
           let messageContent = {};
 
           if (type === 'audio') {
@@ -237,7 +237,7 @@ io.on('connection', (socket) => {
 
   // --- WebRTC Signaling Logic ---
   // This allows calls between users connected to this web interface
-
+  
   socket.on("call_user", (data) => {
       // data: { userToCall, signalData, from }
       // Broadcast to all clients (in a real app, emit to specific socket ID)
