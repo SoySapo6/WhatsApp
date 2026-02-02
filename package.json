@@ -4,7 +4,7 @@
   "description": "WhatsApp Web Clone using Baileys and React",
   "main": "server.js",
   "scripts": {
-    "start": "npm run build && node server.js",
+    "start": "node server.js",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
