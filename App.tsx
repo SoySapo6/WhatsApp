@@ -86,6 +86,11 @@ const App: React.FC = () => {
         isGroup: c.id.includes('@g.us')
       }));
       setChats(formattedChats);
+      
+      // Auto select first chat if none active and we just connected
+      if (!activeChatId && formattedChats.length > 0) {
+          setActiveChatId(formattedChats[0].id);
+      }
     });
 
     socket.on('message', async (payload: any) => {
@@ -104,7 +109,7 @@ const App: React.FC = () => {
               status: 'sent',
               type: 'text'
           };
-
+          
           setChats(prev => prev.map(c => {
               if (c.id === 'gemini') {
                   return {
@@ -311,9 +316,9 @@ const App: React.FC = () => {
 
   if (viewState === ViewState.LOGIN || viewState === ViewState.CONNECTING) {
     return (
-        <Login
-            qrCode={qrCode}
-            status={connectionStatus}
+        <Login 
+            qrCode={qrCode} 
+            status={connectionStatus} 
             pairingCode={pairingCode}
             onLanguageRequestPairing={handleRequestPairing}
         />
