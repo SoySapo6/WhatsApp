@@ -52,6 +52,9 @@ async function getMedia(msg) {
     } else if (msgType === 'audioMessage') {
         stream = await downloadContentFromMessage(msg.message.audioMessage, 'audio');
         type = 'audio';
+    } else if (msgType === 'stickerMessage') {
+        stream = await downloadContentFromMessage(msg.message.stickerMessage, 'sticker');
+        type = 'sticker';
     }
 
     if (!stream) return null;
@@ -64,6 +67,7 @@ async function getMedia(msg) {
     let mimeType = 'image/jpeg';
     if(type === 'video') mimeType = 'video/mp4';
     if(type === 'audio') mimeType = 'audio/ogg';
+    if(type === 'sticker') mimeType = 'image/webp';
 
     return `data:${mimeType};base64,${buffer.toString('base64')}`;
 }
@@ -102,15 +106,23 @@ async function connectToWhatsApp() {
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
     
+    io.emit('connection_update', update);
+
     if (qr) {
       lastQr = await qrcode.toDataURL(qr);
       io.emit('qr', lastQr);
+    } else if (connection === 'open') {
+        lastQr = null;
     }
 
     if (connection === 'close') {
       const shouldReconnect = (lastDisconnect.error instanceof Boom) ? lastDisconnect.error.output.statusCode !== DisconnectReason.loggedOut : true;
-      if (shouldReconnect) connectToWhatsApp();
-      else io.emit('logged_out');
+      if (shouldReconnect) {
+          connectToWhatsApp();
+      } else {
+          lastQr = null;
+          io.emit('logged_out');
+      }
     } else if (connection === 'open') {
       const user = {
          id: sock.user.id.split(':')[0] + '@s.whatsapp.net',
@@ -119,11 +131,22 @@ async function connectToWhatsApp() {
       };
       io.emit('ready', user);
       
-      const chats = store.chats.all().map(chat => ({
-         ...chat,
-         name: chat.name || chat.subject || chat.id.replace('@s.whatsapp.net', '')
-      }));
+      const chats = store.chats.all()
+        .filter(c => !isJidBroadcast(c.id) && c.id !== 'status@broadcast')
+        .map(chat => {
+            const contact = store.contacts[chat.id];
+            return {
+                ...chat,
+                name: chat.name || chat.subject || contact?.name || contact?.notify || chat.id.split('@')[0]
+            };
+        });
       io.emit('chats', chats);
+
+      const contacts = Object.values(store.contacts).map(c => ({
+          ...c,
+          name: c.name || c.notify || c.id.split('@')[0]
+      }));
+      io.emit('contacts', contacts);
     }
   });
 
@@ -171,24 +194,48 @@ io.on('connection', (socket) => {
           id: sock.user.id.split(':')[0] + '@s.whatsapp.net',
           name: sock.user.name || 'Me' 
       });
-      const chats = store.chats.all().sort((a,b) => b.conversationTimestamp - a.conversationTimestamp);
+      const chats = store.chats.all()
+        .filter(c => !isJidBroadcast(c.id) && c.id !== 'status@broadcast')
+        .sort((a,b) => (b.conversationTimestamp || 0) - (a.conversationTimestamp || 0))
+        .map(chat => {
+            const contact = store.contacts[chat.id];
+            return {
+                ...chat,
+                name: chat.name || chat.subject || contact?.name || contact?.notify || chat.id.split('@')[0]
+            };
+        });
       socket.emit('chats', chats.slice(0, 50));
+
+      const contacts = Object.values(store.contacts).map(c => ({
+          ...c,
+          name: c.name || c.notify || c.id.split('@')[0]
+      }));
+      socket.emit('contacts', contacts);
   } else if (lastQr) {
       socket.emit('qr', lastQr);
   }
 
   socket.on('get_profile_pic', async (jid) => {
+      if (!sock) return;
       try {
+          // try to get from store first if we had it? (Baileys doesn't store PPs in store usually)
           const url = await sock.profilePictureUrl(jid, 'image');
           socket.emit('profile_pic', { jid, url });
       } catch (e) {
-          // ignore if no pp
+          socket.emit('profile_pic', { jid, url: null });
       }
   });
 
   socket.on('fetch_messages', async (jid) => {
       try {
           const messages = await store.loadMessages(jid, 50);
+
+          // Mark as read
+          if (messages.length > 0) {
+              const lastMsg = messages[messages.length - 1];
+              await sock.readMessages([lastMsg.key]);
+          }
+
           const messagesWithMedia = await Promise.all(messages.map(async (msg) => {
               let mediaData = null;
               try {
@@ -203,21 +250,40 @@ io.on('connection', (socket) => {
   });
 
   socket.on('request_pairing_code', async (phoneNumber) => {
+      if (!sock) return socket.emit('error', 'Socket not initialized');
       try {
-          const code = await sock.requestPairingCode(phoneNumber);
+          const cleanedPhone = phoneNumber.replace(/\D/g, '');
+          console.log('Requesting pairing code for:', cleanedPhone);
+          const code = await sock.requestPairingCode(cleanedPhone);
           socket.emit('pairing_code', code);
       } catch (e) {
           console.error('Error requesting pairing code', e);
-          socket.emit('error', 'Could not request pairing code');
+          socket.emit('error', 'Could not request pairing code: ' + e.message);
       }
   });
 
   socket.on('send_message', async ({ jid, text }) => {
-     try { await sock.sendMessage(jid, { text }); } 
+     if (!sock) return;
+     try {
+         await sock.presenceSubscribe(jid);
+         await Baileys.delay(500);
+         await sock.sendPresenceUpdate('composing', jid);
+         await Baileys.delay(1000);
+         await sock.sendPresenceUpdate('paused', jid);
+         await sock.sendMessage(jid, { text });
+     }
      catch (e) { console.error(e); }
   });
 
+  socket.on('send_presence', async ({ jid, presence }) => {
+      if (!sock) return;
+      try {
+          await sock.sendPresenceUpdate(presence, jid);
+      } catch(e) {}
+  });
+
   socket.on('send_media', async ({ jid, fileBase64, type, caption, isVoice }) => {
+      if (!sock) return;
       try {
           const b64 = fileBase64.replace(/^data:.*?;base64,/, "");
           const buff = Buffer.from(b64, 'base64');
@@ -237,6 +303,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('post_status', async ({ fileBase64, type, caption, background }) => {
+      if (!sock) return;
       try {
           const jid = 'status@broadcast';
           if (type === 'text') {
@@ -251,6 +318,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('get_group_info', async (jid) => {
+      if (!sock) return;
       try {
           const metadata = await sock.groupMetadata(jid);
           socket.emit('group_info', metadata);
@@ -258,6 +326,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('group_action', async ({ jid, action, participants }) => {
+      if (!sock) return;
       try {
           await sock.groupParticipantsUpdate(jid, participants, action);
       } catch(e) { console.error(e); }

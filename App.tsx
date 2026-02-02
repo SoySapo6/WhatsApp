@@ -21,10 +21,12 @@ const App: React.FC = () => {
   const [sideView, setSideView] = useState<SideBarView>(SideBarView.CHATS);
   
   const [chats, setChats] = useState<ChatSession[]>([]);
+  const [contacts, setContacts] = useState<User[]>([]);
   const [statusUpdates, setStatusUpdates] = useState<any[]>([]);
   const [presences, setPresences] = useState<Record<string, any>>({});
   const [currentUser, setCurrentUser] = useState<User>({ id: '', name: '', avatar: '' });
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [activeStatus, setActiveStatus] = useState<any>(null);
   
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [qrCode, setQrCode] = useState<string | null>(null);
@@ -58,52 +60,79 @@ const App: React.FC = () => {
       setConnectionStatus('Scan QR Code');
     });
 
+    socket.on('connection_update', (update: any) => {
+        if (update.connection === 'connecting') {
+            setConnectionStatus('Connecting to WhatsApp...');
+        } else if (update.connection === 'close') {
+            setConnectionStatus('Connection closed. Reconnecting...');
+        }
+    });
+
     socket.on('pairing_code', (code: string) => {
         setPairingCode(code);
+    });
+
+    socket.on('error', (msg: string) => {
+        setConnectionStatus('Error: ' + msg);
     });
 
     socket.on('ready', (user: any) => {
       setCurrentUser({
         id: user.id,
         name: user.name,
-        avatar: user.avatar || 'https://via.placeholder.com/150'
+        avatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'Me')}&background=random&color=fff`
       });
       setViewState(ViewState.MAIN);
       setConnectionStatus('Online');
     });
 
-    socket.on('chats', (rawChats: any[]) => {
-      const formattedChats: ChatSession[] = rawChats.map(c => ({
-        id: c.id,
-        contact: {
+    socket.on('contacts', (rawContacts: any[]) => {
+        const formatted: User[] = rawContacts.map(c => ({
             id: c.id,
-            name: c.name || c.id.replace('@s.whatsapp.net', ''),
-            avatar: 'https://via.placeholder.com/50'
-        },
-        messages: [], 
-        unreadCount: c.unreadCount || 0,
-        lastMessageTime: c.conversationTimestamp ? c.conversationTimestamp * 1000 : Date.now(),
-        isGroup: c.id.includes('@g.us')
-      }));
-      setChats(formattedChats);
+            name: c.name || c.id.split('@')[0],
+            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name || c.id)}&background=random&color=fff`
+        }));
+        setContacts(formatted);
+    });
+
+    socket.on('chats', (rawChats: any[]) => {
+      setChats(prev => {
+          const newChats: ChatSession[] = rawChats.map(c => {
+              const existing = prev.find(p => p.id === c.id);
+              return {
+                id: c.id,
+                contact: {
+                    id: c.id,
+                    name: c.name || c.id.split('@')[0],
+                    avatar: existing?.contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name || c.id)}&background=random&color=fff`
+                },
+                messages: existing?.messages || [],
+                unreadCount: c.unreadCount || 0,
+                lastMessageTime: c.conversationTimestamp ? c.conversationTimestamp * 1000 : (existing?.lastMessageTime || Date.now()),
+                isGroup: c.id.includes('@g.us')
+              };
+          });
+          return newChats;
+      });
       
       // Request avatars for all chats
       rawChats.forEach(c => {
           socket.emit('get_profile_pic', c.id);
       });
-
-      // Auto select first chat if none active and we just connected
-      if (!activeChatId && formattedChats.length > 0) {
-          setActiveChatId(formattedChats[0].id);
-      }
     });
 
-    socket.on('profile_pic', ({ jid, url }: { jid: string, url: string }) => {
+    socket.on('profile_pic', ({ jid, url }: { jid: string, url: string | null }) => {
         setChats(prev => prev.map(c =>
-            c.id === jid ? { ...c, contact: { ...c.contact, avatar: url } } : c
+            c.id === jid ? {
+                ...c,
+                contact: {
+                    ...c.contact,
+                    avatar: url || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.contact.name)}&background=random&color=fff`
+                }
+            } : c
         ));
         if (currentUser.id === jid) {
-            setCurrentUser(prev => ({ ...prev, avatar: url }));
+            setCurrentUser(prev => ({ ...prev, avatar: url || prev.avatar }));
         }
     });
 
@@ -196,6 +225,8 @@ const App: React.FC = () => {
       socket.off('connect');
       socket.off('disconnect');
       socket.off('qr');
+      socket.off('connection_update');
+      socket.off('error');
       socket.off('ready');
       socket.off('chats');
       socket.off('message');
@@ -221,6 +252,7 @@ const App: React.FC = () => {
     setActiveChatId(id);
     setSideView(SideBarView.CHATS);
     socket.emit('fetch_messages', id);
+    socket.emit('send_presence', { jid: id, presence: 'available' });
     setChats(prev => prev.map(c => 
         c.id === id ? { ...c, unreadCount: 0 } : c
     ));
@@ -244,6 +276,28 @@ const App: React.FC = () => {
 
   const handleRequestPairing = (phone: string) => {
       socket.emit('request_pairing_code', phone);
+  };
+
+  const handleNewChat = (phone: string) => {
+      const jid = phone.replace(/\D/g, '') + '@s.whatsapp.net';
+      const chatExists = chats.find(c => c.id === jid);
+      if (!chatExists) {
+          const newChat: ChatSession = {
+              id: jid,
+              contact: {
+                  id: jid,
+                  name: phone,
+                  avatar: 'https://via.placeholder.com/50'
+              },
+              messages: [],
+              unreadCount: 0,
+              lastMessageTime: Date.now(),
+              isGroup: false
+          };
+          setChats(prev => [newChat, ...prev]);
+          socket.emit('get_profile_pic', jid);
+      }
+      handleSelectChat(jid);
   };
 
   const handleGroupAction = (action: string, participantId?: string) => {
@@ -321,6 +375,7 @@ const App: React.FC = () => {
           <Sidebar 
             currentUser={currentUser}
             chats={chats}
+            contacts={contacts}
             statusUpdates={statusUpdates}
             activeChatId={activeChatId}
             presences={presences}
@@ -328,6 +383,8 @@ const App: React.FC = () => {
             onChangeView={setSideView}
             onSelectChat={handleSelectChat}
             onUploadStatus={handleUploadStatus}
+            onNewChat={handleNewChat}
+            onViewStatus={setActiveStatus}
           />
         </div>
 
@@ -339,7 +396,10 @@ const App: React.FC = () => {
              <div className="flex-1 flex flex-col relative">
                 <ChatWindow 
                     chat={activeChat} 
-                    onBack={() => setActiveChatId(null)}
+                    onBack={() => {
+                        setActiveChatId(null);
+                        socket.emit('send_presence', { jid: activeChat.id, presence: 'unavailable' });
+                    }}
                     onSendMessage={handleSendMessage}
                     onSendImage={handleSendImage}
                     onSendAudio={handleSendAudio}
@@ -385,6 +445,39 @@ const App: React.FC = () => {
                 currentUserJid={currentUser.id}
                 onAction={handleGroupAction}
               />
+          )}
+
+          {activeStatus && (
+              <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-10">
+                  <button
+                    onClick={() => setActiveStatus(null)}
+                    className="absolute top-10 right-10 text-white hover:text-gray-300"
+                  >
+                      <Icons.Close className="w-8 h-8" />
+                  </button>
+                  <div className="max-w-2xl w-full h-full flex flex-col items-center justify-center">
+                      <div className="w-full mb-4 flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-full border border-white p-0.5 overflow-hidden">
+                              <img src="https://via.placeholder.com/50" className="w-full h-full object-cover" />
+                          </div>
+                          <div>
+                              <p className="text-white font-medium">{activeStatus.pushName || 'Unknown User'}</p>
+                          </div>
+                      </div>
+                      <div className="flex-1 w-full bg-[#111b21] flex items-center justify-center rounded-xl overflow-hidden shadow-2xl border border-white/10">
+                          {activeStatus.type === 'video' ? (
+                              <video src={activeStatus.mediaUrl} controls autoPlay className="max-w-full max-h-full" />
+                          ) : (
+                              <img src={activeStatus.mediaUrl} className="max-w-full max-h-full object-contain" />
+                          )}
+                      </div>
+                      {activeStatus.text && (
+                          <div className="mt-6 text-white text-center text-lg bg-black/40 px-6 py-3 rounded-full backdrop-blur-md">
+                              {activeStatus.text}
+                          </div>
+                      )}
+                  </div>
+              </div>
           )}
         </div>
       </div>

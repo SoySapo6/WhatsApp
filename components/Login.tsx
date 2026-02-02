@@ -116,7 +116,7 @@ export const Login: React.FC<LoginProps> = ({ qrCode, status, pairingCode, onReq
                         </div>
                     )}
                 </div>
-                <p className="mt-6 text-[#41525d] text-sm font-medium">
+                <p className={`mt-6 text-sm font-medium ${status.startsWith('Error') ? 'text-red-500' : 'text-[#41525d]'}`}>
                     {status}
                 </p>
                 <div className="mt-4 flex items-center gap-2 text-gray-400 text-xs">
