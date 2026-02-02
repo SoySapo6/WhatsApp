@@ -167,6 +167,22 @@ const App: React.FC = () => {
         ));
     });
 
+    socket.on('message_sent', ({ jid, message }: { jid: string, message: any }) => {
+        const realMsg = normalizeMessage(message);
+        setChats(prev => prev.map(c => {
+            if (c.id === jid) {
+                // Remove temp sending messages and add the real one if not already there
+                const filtered = c.messages.filter(m => m.status !== 'pending');
+                const exists = filtered.find(m => m.id === realMsg.id);
+                return {
+                    ...c,
+                    messages: exists ? filtered : [...filtered, realMsg]
+                };
+            }
+            return c;
+        }));
+    });
+
     socket.on('presence', (update: any) => {
         setPresences(prev => ({
             ...prev,
@@ -184,9 +200,11 @@ const App: React.FC = () => {
         if (chatExists) {
             return prevChats.map(c => {
                 if (c.id === chatId) {
+                    // Deduplicate and remove temp sending messages
+                    const filtered = c.messages.filter(m => m.id !== msg.id && m.status !== 'pending');
                     return {
                         ...c,
-                        messages: [...c.messages, msg],
+                        messages: [...filtered, msg],
                         lastMessageTime: msg.timestamp,
                         unreadCount: (activeChatId !== chatId && !msg.key.fromMe) ? c.unreadCount + 1 : 0
                     };
@@ -226,17 +244,35 @@ const App: React.FC = () => {
         ));
     });
 
+    socket.on('group_participants_update', (update: any) => {
+        socket.emit('get_group_info', update.id);
+    });
+
+    socket.on('number_status', (result: any) => {
+        if (result.exists) {
+            handleNewChat(result.jid);
+        } else {
+            alert('This number is not on WhatsApp');
+        }
+    });
+
     // --- Signal Handling ---
     socket.on('call_made', async (data) => {
-        // Simple implementation: Auto-accept incoming call setup for demo
-        // In reality, we would show "Incoming" UI first.
         setActiveCall({
             isActive: true,
             isIncoming: true,
-            isVideo: true,
+            isVideo: data.isVideo,
             remoteUser: data.from
         });
-        // We will need to set remote description here
+    });
+
+    socket.on('call_answered', (data) => {
+        console.log("Call answered by:", data.to);
+        // Here we would set remote description if using real WebRTC
+    });
+
+    socket.on('call_rejected', (data) => {
+        setActiveCall(null);
     });
 
     socket.on('call_ended', () => {
@@ -287,6 +323,28 @@ const App: React.FC = () => {
   };
 
   const handleSendMessage = useCallback(async (chatId: string, text: string) => {
+    const tempId = 'temp-' + Date.now();
+    const tempMsg: Message = {
+        id: tempId,
+        key: { remoteJid: chatId, fromMe: true, id: tempId },
+        text: text,
+        senderId: 'me',
+        timestamp: Date.now(),
+        status: 'pending',
+        type: 'text'
+    };
+
+    setChats(prev => prev.map(c => {
+        if (c.id === chatId) {
+            return {
+                ...c,
+                messages: [...c.messages, tempMsg],
+                lastMessageTime: tempMsg.timestamp
+            };
+        }
+        return c;
+    }));
+
     socket.emit('send_message', { jid: chatId, text });
   }, []);
 
@@ -317,15 +375,21 @@ const App: React.FC = () => {
   };
 
   const handleNewChat = (phone: string) => {
-      const jid = phone.replace(/\D/g, '') + '@s.whatsapp.net';
+      const jid = phone.includes('@') ? phone : phone.replace(/\D/g, '') + '@s.whatsapp.net';
       const chatExists = chats.find(c => c.id === jid);
       if (!chatExists) {
+          // If it's just a phone number and we haven't verified it yet
+          if (!phone.includes('@')) {
+              socket.emit('check_number', phone);
+              return;
+          }
+
           const newChat: ChatSession = {
               id: jid,
               contact: {
                   id: jid,
-                  name: phone,
-                  avatar: 'https://via.placeholder.com/50'
+                  name: phone.split('@')[0],
+                  avatar: 'https://ui-avatars.com/api/?name=' + phone.split('@')[0]
               },
               messages: [],
               unreadCount: 0,

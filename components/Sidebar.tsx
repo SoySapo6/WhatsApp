@@ -270,7 +270,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentUser, chats, contacts, 
                                 }}
                                 className="bg-[#00a884] text-[#111b21] px-4 py-1 rounded font-medium hover:bg-[#009677] transition-colors"
                             >
-                                Start
+                                Chat
                             </button>
                         </div>
                     </div>

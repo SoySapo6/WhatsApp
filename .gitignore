@@ -4,3 +4,4 @@ auth_info_baileys
 baileys_store_multi.json
 package-lock.json
 *.log
+.DS_Store
