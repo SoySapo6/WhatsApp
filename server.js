@@ -73,7 +73,7 @@ async function connectToWhatsApp() {
   sock = makeWASocket({
     version,
     auth: state,
-    printQRInTerminal: true,
+    printQRInTerminal: false,
     syncFullHistory: false,
     generateHighQualityLinkPreview: true,
     browser: ["WhatsApp Clone", "Chrome", "10.0"],
@@ -261,4 +261,7 @@ async function connectToWhatsApp() {
 connectToWhatsApp();
 
 const PORT = 3001;
-server.listen(PORT, () => console.log(`Backend Server running on port ${PORT}`));
+server.listen(PORT, () => {
+    console.log(`Backend Server running on port ${PORT}`);
+    console.log(`Frontend should be running on http://localhost:3000`);
+});
