@@ -183,6 +183,22 @@ async function connectToWhatsApp() {
      io.emit('group_update', updates);
   });
 
+  sock.ev.on('contacts.upsert', (contacts) => {
+      const formatted = contacts.map(c => ({
+          ...c,
+          name: c.name || c.notify || c.id.split('@')[0]
+      }));
+      io.emit('contacts', formatted);
+  });
+
+  sock.ev.on('contacts.update', (updates) => {
+      const formatted = updates.map(c => ({
+          ...c,
+          name: c.name || c.notify || c.id?.split('@')[0]
+      }));
+      io.emit('contacts', formatted);
+  });
+
 }
 
 connectToWhatsApp();
@@ -329,6 +345,65 @@ io.on('connection', (socket) => {
       if (!sock) return;
       try {
           await sock.groupParticipantsUpdate(jid, participants, action);
+      } catch(e) { console.error(e); }
+  });
+
+  socket.on('update_profile_name', async (name) => {
+      if (!sock) return;
+      try {
+          await sock.updateProfileName(name);
+          socket.emit('profile_updated', { name });
+      } catch (e) { console.error(e); }
+  });
+
+  socket.on('update_profile_status', async (status) => {
+      if (!sock) return;
+      try {
+          await sock.updateProfileStatus(status);
+          socket.emit('profile_updated', { status });
+      } catch (e) { console.error(e); }
+  });
+
+  socket.on('update_profile_pic', async (fileBase64) => {
+      if (!sock) return;
+      try {
+          const b64 = fileBase64.replace(/^data:.*?;base64,/, "");
+          const buff = Buffer.from(b64, 'base64');
+          await sock.updateProfilePicture(sock.user.id, buff);
+          const url = await sock.profilePictureUrl(sock.user.id, 'image');
+          socket.emit('profile_pic', { jid: sock.user.id, url });
+      } catch (e) { console.error(e); }
+  });
+
+  socket.on('fetch_my_status', async () => {
+      if (!sock) return;
+      try {
+          const status = await sock.fetchStatus(sock.user.id);
+          socket.emit('my_status', status);
+      } catch(e) {}
+  });
+
+  socket.on('get_privacy_settings', async () => {
+      if (!sock) return;
+      try {
+          const settings = await sock.fetchPrivacySettings();
+          socket.emit('privacy_settings', settings);
+      } catch(e) { console.error(e); }
+  });
+
+  socket.on('update_privacy_setting', async ({ type, value }) => {
+      if (!sock) return;
+      try {
+          switch(type) {
+              case 'last': await sock.updateLastSeenPrivacy(value); break;
+              case 'online': await sock.updateOnlinePrivacy(value); break;
+              case 'photo': await sock.updateProfilePicturePrivacy(value); break;
+              case 'status': await sock.updateStatusPrivacy(value); break;
+              case 'readreceipts': await sock.updateReadReceiptsPrivacy(value); break;
+              case 'groupadd': await sock.updateGroupsAddPrivacy(value); break;
+          }
+          const settings = await sock.fetchPrivacySettings();
+          socket.emit('privacy_settings', settings);
       } catch(e) { console.error(e); }
   });
 

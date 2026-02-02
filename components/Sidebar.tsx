@@ -7,7 +7,7 @@ interface SidebarProps {
   currentUser: User;
   chats: ChatSession[];
   contacts: User[];
-  statusUpdates: any[];
+  statusUpdates: Record<string, any[]>;
   activeChatId: string | null;
   presences: Record<string, any>;
   currentView: SideBarView;
@@ -15,11 +15,15 @@ interface SidebarProps {
   onChangeView: (view: SideBarView) => void;
   onUploadStatus: (file: string, type: 'image'|'video') => void;
   onNewChat: (phone: string) => void;
-  onViewStatus: (status: any) => void;
+  onViewStatus: (statuses: any[]) => void;
+  onUpdateProfile: (data: { name?: string, status?: string, photo?: string }) => void;
+  privacySettings?: Record<string, string>;
+  onUpdatePrivacy?: (type: string, value: string) => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentUser, chats, contacts, statusUpdates, activeChatId, presences, currentView, onSelectChat, onChangeView, onUploadStatus, onNewChat, onViewStatus }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ currentUser, chats, contacts, statusUpdates, activeChatId, presences, currentView, onSelectChat, onChangeView, onUploadStatus, onNewChat, onViewStatus, onUpdateProfile, privacySettings, onUpdatePrivacy }) => {
   const statusInputRef = useRef<HTMLInputElement>(null);
+  const profilePicInputRef = useRef<HTMLInputElement>(null);
   const [newChatPhone, setNewChatPhone] = React.useState('');
   const [searchTerm, setSearchTerm] = React.useState('');
 
@@ -40,7 +44,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentUser, chats, contacts, 
         <img 
             src={currentUser.avatar || 'https://via.placeholder.com/150'} 
             alt="Profile" 
-            className="w-10 h-10 rounded-full cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={() => onChangeView(SideBarView.PROFILE)}
+            className="w-10 h-10 rounded-full cursor-pointer hover:opacity-80 transition-opacity object-cover"
         />
         <div className="flex items-center gap-5 text-[#aebac1]">
             <button title="Communities" onClick={() => onChangeView(SideBarView.COMMUNITIES)}>
@@ -55,12 +60,184 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentUser, chats, contacts, 
              <button title="New Chat" onClick={() => onChangeView(SideBarView.NEW_CHAT)}>
                 <Icons.Plus className={`w-6 h-6 ${currentView === SideBarView.NEW_CHAT ? 'text-[#00a884]' : ''}`} />
             </button>
+            <button title="Settings" onClick={() => onChangeView(SideBarView.SETTINGS)}>
+                <Icons.Settings className={`w-6 h-6 ${currentView === SideBarView.SETTINGS ? 'text-[#00a884]' : ''}`} />
+            </button>
             <Icons.Menu className="w-6 h-6 cursor-pointer" />
         </div>
     </div>
   );
 
+  const [isEditingName, setIsEditingName] = React.useState(false);
+  const [isEditingStatus, setIsEditingStatus] = React.useState(false);
+  const [editName, setEditName] = React.useState(currentUser.name);
+  const [editStatus, setEditStatus] = React.useState(currentUser.status || 'At WhatsApp');
+
+  const handleProfilePicChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              onUpdateProfile({ photo: reader.result as string });
+          };
+          reader.readAsDataURL(file);
+      }
+  };
+
   const renderContent = () => {
+    if (currentView === SideBarView.SETTINGS) {
+        return (
+            <div className="text-[#e9edef] h-full flex flex-col bg-[#111b21]">
+                <div className="h-[108px] bg-wa-header flex items-end px-6 pb-4 shrink-0">
+                    <div className="flex items-center gap-6">
+                        <button onClick={() => onChangeView(SideBarView.CHATS)} className="text-[#aebac1] hover:text-white">
+                            <Icons.Back className="w-6 h-6" />
+                        </button>
+                        <h2 className="text-xl font-medium">Settings</h2>
+                    </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                    <div className="p-4 border-b border-wa-border hover:bg-[#202c33] cursor-pointer flex items-center gap-4" onClick={() => onChangeView(SideBarView.PROFILE)}>
+                        <img src={currentUser.avatar} className="w-[82px] h-[82px] rounded-full object-cover" />
+                        <div>
+                            <p className="text-lg">{currentUser.name}</p>
+                            <p className="text-[#8696a0] text-sm">{currentUser.status || 'At WhatsApp'}</p>
+                        </div>
+                    </div>
+
+                    <div className="mt-2">
+                        <div className="px-6 py-4 flex items-center gap-6 hover:bg-[#202c33] cursor-pointer">
+                            <Icons.Shield className="w-5 h-5 text-[#8696a0]" />
+                            <div className="flex-1 border-b border-wa-border pb-4">
+                                <p className="text-base">Privacy</p>
+                            </div>
+                        </div>
+
+                        <div className="px-6 py-4 space-y-6">
+                            <h3 className="text-[#00a884] font-medium text-sm">Who can see my personal info</h3>
+
+                            {['last', 'photo', 'status'].map((type) => (
+                                <div key={type} className="flex flex-col gap-1">
+                                    <p className="capitalize">{type === 'last' ? 'Last Seen' : type === 'photo' ? 'Profile Photo' : 'Status'}</p>
+                                    <select
+                                        value={privacySettings?.[type] || 'all'}
+                                        onChange={(e) => onUpdatePrivacy?.(type, e.target.value)}
+                                        className="bg-transparent border-b border-[#8696a0]/30 py-1 focus:outline-none text-[#aebac1]"
+                                    >
+                                        <option value="all">Everyone</option>
+                                        <option value="contacts">My Contacts</option>
+                                        <option value="none">Nobody</option>
+                                    </select>
+                                </div>
+                            ))}
+
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p>Read receipts</p>
+                                    <p className="text-[#8696a0] text-xs">If turned off, you won't send or receive Read receipts.</p>
+                                </div>
+                                <input
+                                    type="checkbox"
+                                    checked={privacySettings?.readreceipts === 'all'}
+                                    onChange={(e) => onUpdatePrivacy?.('readreceipts', e.target.checked ? 'all' : 'none')}
+                                    className="accent-[#00a884] w-5 h-5"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="px-6 py-4 flex items-center gap-6 hover:bg-[#202c33] cursor-pointer text-[#ea5455]">
+                            <Icons.Logout className="w-5 h-5" />
+                            <div className="flex-1 pb-4">
+                                <p className="text-base">Log out</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    if (currentView === SideBarView.PROFILE) {
+        return (
+            <div className="text-[#e9edef] h-full flex flex-col bg-[#111b21]">
+                <div className="h-[108px] bg-wa-header flex items-end px-6 pb-4 shrink-0">
+                    <div className="flex items-center gap-6">
+                        <button onClick={() => onChangeView(SideBarView.CHATS)} className="text-[#aebac1] hover:text-white">
+                            <Icons.Back className="w-6 h-6" />
+                        </button>
+                        <h2 className="text-xl font-medium">Profile</h2>
+                    </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                    <div className="flex flex-col items-center py-7">
+                        <div className="relative group cursor-pointer" onClick={() => profilePicInputRef.current?.click()}>
+                            <img
+                                src={currentUser.avatar}
+                                className="w-[200px] h-[200px] rounded-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Icons.Image className="w-10 h-10 text-white mb-2" />
+                                <span className="text-white text-xs uppercase text-center font-medium">Change Profile<br/>Photo</span>
+                            </div>
+                            <input type="file" ref={profilePicInputRef} hidden accept="image/*" onChange={handleProfilePicChange} />
+                        </div>
+                    </div>
+
+                    <div className="bg-[#111b21] px-7 py-4">
+                        <p className="text-[#00a884] text-sm mb-4">Your name</p>
+                        <div className="flex items-center justify-between border-b border-transparent hover:border-[#8696a0]/30 pb-2 transition-colors">
+                            {isEditingName ? (
+                                <input
+                                    autoFocus
+                                    value={editName}
+                                    onChange={e => setEditName(e.target.value)}
+                                    onBlur={() => {
+                                        setIsEditingName(false);
+                                        onUpdateProfile({ name: editName });
+                                    }}
+                                    onKeyDown={e => e.key === 'Enter' && setIsEditingName(false)}
+                                    className="bg-transparent text-lg w-full focus:outline-none"
+                                />
+                            ) : (
+                                <span className="text-lg">{currentUser.name}</span>
+                            )}
+                            <button onClick={() => setIsEditingName(!isEditingName)} className="text-[#aebac1]">
+                                <Icons.Edit className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <p className="text-[#8696a0] text-sm mt-3">This is not your username or pin. This name will be visible to your WhatsApp contacts.</p>
+                    </div>
+
+                    <div className="bg-[#111b21] px-7 py-4 mt-2">
+                        <p className="text-[#00a884] text-sm mb-4">About</p>
+                        <div className="flex items-center justify-between border-b border-transparent hover:border-[#8696a0]/30 pb-2 transition-colors">
+                            {isEditingStatus ? (
+                                <input
+                                    autoFocus
+                                    value={editStatus}
+                                    onChange={e => setEditStatus(e.target.value)}
+                                    onBlur={() => {
+                                        setIsEditingStatus(false);
+                                        onUpdateProfile({ status: editStatus });
+                                    }}
+                                    onKeyDown={e => e.key === 'Enter' && setIsEditingStatus(false)}
+                                    className="bg-transparent text-lg w-full focus:outline-none"
+                                />
+                            ) : (
+                                <span className="text-lg">{currentUser.status || 'At WhatsApp'}</span>
+                            )}
+                            <button onClick={() => setIsEditingStatus(!isEditingStatus)} className="text-[#aebac1]">
+                                <Icons.Edit className="w-5 h-5" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     if (currentView === SideBarView.NEW_CHAT) {
         return (
             <div className="text-[#e9edef] h-full flex flex-col">
@@ -135,21 +312,28 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentUser, chats, contacts, 
                     </div>
                 </div>
                 <div className="text-[#8696a0] text-sm uppercase font-medium mb-4">Recent updates</div>
-                {statusUpdates.map((status, i) => (
-                    <div key={i} className="flex items-center gap-4 py-3 cursor-pointer" onClick={() => onViewStatus(status)}>
-                        <div className="w-10 h-10 rounded-full border-2 border-[#00a884] p-0.5 overflow-hidden">
-                            {status.type === 'video' ? (
-                                <video src={status.mediaUrl} className="w-full h-full object-cover" />
-                            ) : (
-                                <img src={status.mediaUrl || 'https://via.placeholder.com/50'} className="w-full h-full object-cover" />
-                            )}
+                {Object.entries(statusUpdates).map(([jid, statuses]) => {
+                    const latest = statuses[0];
+                    return (
+                        <div key={jid} className="flex items-center gap-4 py-3 cursor-pointer" onClick={() => onViewStatus(statuses)}>
+                            <div className="w-10 h-10 rounded-full border-2 border-[#00a884] p-0.5 overflow-hidden">
+                                {latest.type === 'video' ? (
+                                    <video src={latest.mediaUrl} className="w-full h-full object-cover" />
+                                ) : latest.mediaUrl ? (
+                                    <img src={latest.mediaUrl} className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="w-full h-full bg-wa-outgoing flex items-center justify-center text-[8px] text-center p-0.5">
+                                        {latest.text}
+                                    </div>
+                                )}
+                            </div>
+                            <div>
+                                <p className="text-[#e9edef]">{latest.pushName || jid.split('@')[0]}</p>
+                                <p className="text-xs text-[#8696a0]">{format(latest.timestamp, 'HH:mm')}</p>
+                            </div>
                         </div>
-                        <div>
-                             <p className="text-[#e9edef]">{status.pushName || 'Unknown User'}</p>
-                             <p className="text-xs text-[#8696a0]">{format(status.timestamp, 'HH:mm')}</p>
-                        </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         )
     }
