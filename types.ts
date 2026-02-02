@@ -31,7 +31,7 @@ export interface Message {
   senderId: string; 
   timestamp: number;
   status: 'sent' | 'delivered' | 'read' | 'pending';
-  type: 'text' | 'image' | 'audio' | 'video' | 'sticker' | 'call';
+  type: 'text' | 'image' | 'audio' | 'video' | 'sticker' | 'document' | 'call';
   pushName?: string;
   mediaUrl?: string; // Base64 or URL for display
 }
