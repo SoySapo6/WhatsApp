@@ -36,14 +36,14 @@ export const Login: React.FC<LoginProps> = ({ qrCode, status, pairingCode, onReq
                     </ol>
                 </div>
                 {!showPairing ? (
-                    <div
+                    <div 
                         className="text-[#00a884] font-medium mt-8 hover:underline cursor-pointer"
                         onClick={() => setShowPairing(true)}
                     >
                         Link with phone number
                     </div>
                 ) : (
-                    <div
+                    <div 
                         className="text-[#00a884] font-medium mt-8 hover:underline cursor-pointer"
                         onClick={() => setShowPairing(false)}
                     >
@@ -69,14 +69,14 @@ export const Login: React.FC<LoginProps> = ({ qrCode, status, pairingCode, onReq
                             ) : (
                                 <div className="w-full">
                                     <p className="text-xs text-gray-500 mb-2">Enter phone number with country code</p>
-                                    <input
-                                        type="text"
-                                        placeholder="e.g. 1234567890"
+                                    <input 
+                                        type="text" 
+                                        placeholder="e.g. 1234567890" 
                                         className="w-full p-2 border rounded mb-3 text-sm outline-none focus:border-[#00a884]"
                                         value={phone}
                                         onChange={(e) => setPhone(e.target.value)}
                                     />
-                                    <button
+                                    <button 
                                         className="w-full bg-[#00a884] text-white p-2 rounded text-sm font-medium hover:bg-[#009677] transition-colors"
                                         onClick={() => onRequestPairing?.(phone)}
                                     >
@@ -88,9 +88,9 @@ export const Login: React.FC<LoginProps> = ({ qrCode, status, pairingCode, onReq
                     ) : (
                         <>
                             {qrCode ? (
-                                <img
-                                    src={qrCode}
-                                    alt="Scan QR Code"
+                                <img 
+                                    src={qrCode} 
+                                    alt="Scan QR Code" 
                                     className="w-64 h-64 border-4 border-white shadow-sm"
                                 />
                             ) : (
