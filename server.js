@@ -55,6 +55,9 @@ async function getMedia(msg) {
     } else if (msgType === 'stickerMessage') {
         stream = await downloadContentFromMessage(msg.message.stickerMessage, 'sticker');
         type = 'sticker';
+    } else if (msgType === 'documentMessage') {
+        stream = await downloadContentFromMessage(msg.message.documentMessage, 'document');
+        type = 'document';
     }
 
     if (!stream) return null;
@@ -68,6 +71,7 @@ async function getMedia(msg) {
     if(type === 'video') mimeType = 'video/mp4';
     if(type === 'audio') mimeType = 'audio/ogg';
     if(type === 'sticker') mimeType = 'image/webp';
+    if(type === 'document') mimeType = msg.message.documentMessage.mimetype || 'application/octet-stream';
 
     return `data:${mimeType};base64,${buffer.toString('base64')}`;
 }
@@ -85,6 +89,7 @@ async function connectToWhatsApp() {
     syncFullHistory: false,
     generateHighQualityLinkPreview: true,
     browser: ["Ubuntu", "Chrome", "20.0.04"],
+    markOnlineOnConnect: true,
   });
 
   store.bind(sock.ev);
@@ -124,10 +129,15 @@ async function connectToWhatsApp() {
           io.emit('logged_out');
       }
     } else if (connection === 'open') {
+      let avatar = '';
+      try {
+          avatar = await sock.profilePictureUrl(sock.user.id, 'image').catch(() => '');
+      } catch(e) {}
+
       const user = {
          id: sock.user.id.split(':')[0] + '@s.whatsapp.net',
          name: sock.user.name || 'Me',
-         avatar: ''
+         avatar: avatar
       };
       io.emit('ready', user);
       
@@ -183,6 +193,28 @@ async function connectToWhatsApp() {
      io.emit('group_update', updates);
   });
 
+  sock.ev.on('chats.upsert', (newChats) => {
+      const formatted = newChats.map(chat => {
+          const contact = store.contacts[chat.id];
+          return {
+              ...chat,
+              name: chat.name || chat.subject || contact?.name || contact?.notify || chat.id.split('@')[0]
+          };
+      });
+      io.emit('chats', formatted);
+  });
+
+  sock.ev.on('chats.update', (updates) => {
+      const formatted = updates.map(chat => {
+          const contact = store.contacts[chat.id];
+          return {
+              ...chat,
+              name: chat.name || chat.subject || contact?.name || contact?.notify || chat.id?.split('@')[0]
+          };
+      });
+      io.emit('chats', formatted);
+  });
+
   sock.ev.on('contacts.upsert', (contacts) => {
       const formatted = contacts.map(c => ({
           ...c,
@@ -227,6 +259,15 @@ io.on('connection', (socket) => {
           name: c.name || c.notify || c.id.split('@')[0]
       }));
       socket.emit('contacts', contacts);
+
+      // Fetch status history
+      store.loadMessages('status@broadcast', 20).then(msgs => {
+          msgs.forEach(async m => {
+              const media = await getMedia(m).catch(() => null);
+              socket.emit('status_update', { raw: m, media, isStatus: true });
+          });
+      }).catch(() => {});
+
   } else if (lastQr) {
       socket.emit('qr', lastQr);
   }
@@ -234,8 +275,7 @@ io.on('connection', (socket) => {
   socket.on('get_profile_pic', async (jid) => {
       if (!sock) return;
       try {
-          // try to get from store first if we had it? (Baileys doesn't store PPs in store usually)
-          const url = await sock.profilePictureUrl(jid, 'image');
+          const url = await sock.profilePictureUrl(jid, 'image').catch(() => null);
           socket.emit('profile_pic', { jid, url });
       } catch (e) {
           socket.emit('profile_pic', { jid, url: null });
@@ -268,7 +308,10 @@ io.on('connection', (socket) => {
   socket.on('request_pairing_code', async (phoneNumber) => {
       if (!sock) return socket.emit('error', 'Socket not initialized');
       try {
+          // Ensure number is in international format without + or spaces
           const cleanedPhone = phoneNumber.replace(/\D/g, '');
+          if (!cleanedPhone) return socket.emit('error', 'Invalid phone number');
+
           console.log('Requesting pairing code for:', cleanedPhone);
           const code = await sock.requestPairingCode(cleanedPhone);
           socket.emit('pairing_code', code);
@@ -298,7 +341,7 @@ io.on('connection', (socket) => {
       } catch(e) {}
   });
 
-  socket.on('send_media', async ({ jid, fileBase64, type, caption, isVoice }) => {
+  socket.on('send_media', async ({ jid, fileBase64, type, caption, isVoice, fileName }) => {
       if (!sock) return;
       try {
           const b64 = fileBase64.replace(/^data:.*?;base64,/, "");
@@ -310,12 +353,26 @@ io.on('connection', (socket) => {
               messageContent = { audio: buff, ptt: isVoice, mimetype: 'audio/mp4' };
           } else if (type === 'video') {
               messageContent = { video: buff, caption, mimetype: 'video/mp4' };
+          } else if (type === 'document') {
+              messageContent = {
+                  document: buff,
+                  mimetype: mime.lookup(fileName) || 'application/octet-stream',
+                  fileName: fileName || 'document'
+              };
           } else {
               messageContent = { image: buff, caption };
           }
 
           await sock.sendMessage(jid, messageContent);
       } catch(e) { console.error('Error sending media', e); }
+  });
+
+  socket.on('search_contact', async (number) => {
+      if (!sock) return;
+      try {
+          const [result] = await sock.onWhatsApp(number);
+          socket.emit('search_result', result);
+      } catch (e) { console.error(e); }
   });
 
   socket.on('post_status', async ({ fileBase64, type, caption, background }) => {
@@ -411,19 +468,20 @@ io.on('connection', (socket) => {
   // This allows calls between users connected to this web interface
   
   socket.on("call_user", (data) => {
-      // data: { userToCall, signalData, from }
-      // Broadcast to all clients (in a real app, emit to specific socket ID)
+      // data: { userToCall, signalData, from, toJid }
       socket.broadcast.emit("call_made", {
           signal: data.signalData,
-          from: data.from
+          from: data.from,
+          toJid: data.toJid
       });
   });
 
   socket.on("answer_call", (data) => {
-      // data: { to, signal }
+      // data: { to, signal, fromJid }
       socket.broadcast.emit("call_answered", {
           signal: data.signal,
-          to: data.to
+          to: data.to,
+          fromJid: data.fromJid
       });
   });
 

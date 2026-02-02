@@ -48,8 +48,20 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isMe }) =
                     <img src={message.mediaUrl} alt="Sticker" className="w-[150px] h-[150px] object-contain" />
                 </div>
             )}
+
+            {message.type === 'document' && message.mediaUrl && (
+                <div className={`p-2 pb-0 min-w-[200px] flex items-center gap-3 bg-black/20 rounded-lg m-1 cursor-pointer hover:bg-black/30 transition-colors`}>
+                    <div className="bg-[#5f66cd] p-2 rounded">
+                         <Icons.File className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                        <p className="text-sm truncate text-[#e9edef]">{message.text || 'Document'}</p>
+                        <a href={message.mediaUrl} download={message.text || 'document'} className="text-[11px] text-[#00a884] hover:underline">Download</a>
+                    </div>
+                </div>
+            )}
             
-            {(message.text || (!message.mediaUrl && message.type === 'text')) && (
+            {(message.text && message.type !== 'document' || (!message.mediaUrl && message.type === 'text')) && (
                 <div className="px-2 pt-1 pb-4 text-[#e9edef] min-w-[80px] whitespace-pre-wrap break-words">
                     {message.text}
                 </div>

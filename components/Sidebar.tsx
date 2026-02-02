@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { ChatSession, User, SideBarView, Presence } from '../types';
 import { Icons } from './Icons';
 import { format } from 'date-fns';
+import { socket } from '../services/socket';
 
 interface SidebarProps {
   currentUser: User;
@@ -238,6 +239,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentUser, chats, contacts, 
         );
     }
 
+    const [searchResult, setSearchResult] = React.useState<any>(null);
+    const [isSearching, setIsSearching] = React.useState(false);
+
+    React.useEffect(() => {
+        const handleSearchResult = (result: any) => {
+            setSearchResult(result);
+            setIsSearching(false);
+            if (result && result.exists) {
+                onNewChat(result.jid);
+                onChangeView(SideBarView.CHATS);
+            } else if (result) {
+                alert("This number is not on WhatsApp");
+            }
+        };
+        socket.on('search_result', handleSearchResult);
+        return () => { socket.off('search_result', handleSearchResult); };
+    }, [onNewChat, onChangeView]);
+
     if (currentView === SideBarView.NEW_CHAT) {
         return (
             <div className="text-[#e9edef] h-full flex flex-col">
@@ -262,15 +281,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentUser, chats, contacts, 
                                 className="flex-1 bg-transparent border-b border-[#00a884] text-[#e9edef] py-1 focus:outline-none placeholder-[#8696a0]"
                             />
                             <button
+                                disabled={isSearching}
                                 onClick={() => {
                                     if (newChatPhone.trim()) {
-                                        onNewChat(newChatPhone);
+                                        setIsSearching(true);
+                                        socket.emit('search_contact', newChatPhone.replace(/\D/g, ''));
                                         setNewChatPhone('');
                                     }
                                 }}
-                                className="bg-[#00a884] text-[#111b21] px-4 py-1 rounded font-medium hover:bg-[#009677] transition-colors"
+                                className="bg-[#00a884] text-[#111b21] px-4 py-1 rounded font-medium hover:bg-[#009677] transition-colors disabled:opacity-50"
                             >
-                                Start
+                                {isSearching ? '...' : 'Start'}
                             </button>
                         </div>
                     </div>

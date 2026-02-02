@@ -21,7 +21,8 @@ import {
   LogOut,
   Plus,
   Pencil,
-  Settings
+  Settings,
+  FileText
 } from 'lucide-react';
 
 export const Icons = {
@@ -46,5 +47,6 @@ export const Icons = {
   Logout: LogOut,
   Plus,
   Edit: Pencil,
-  Settings
+  Settings,
+  File: (props: any) => <FileText {...props} />,
 };
