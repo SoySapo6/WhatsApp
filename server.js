@@ -156,109 +156,110 @@ async function connectToWhatsApp() {
      io.emit('group_update', updates);
   });
 
-  io.on('connection', (socket) => {
-    
-    if (sock?.user) {
-        socket.emit('ready', {
-            id: sock.user.id.split(':')[0] + '@s.whatsapp.net',
-            name: sock.user.name || 'Me' 
-        });
-        const chats = store.chats.all().sort((a,b) => b.conversationTimestamp - a.conversationTimestamp);
-        socket.emit('chats', chats.slice(0, 50));
-    }
-
-    socket.on('request_pairing_code', async (phoneNumber) => {
-        try {
-            const code = await sock.requestPairingCode(phoneNumber);
-            socket.emit('pairing_code', code);
-        } catch (e) {
-            console.error('Error requesting pairing code', e);
-            socket.emit('error', 'Could not request pairing code');
-        }
-    });
-
-    socket.on('send_message', async ({ jid, text }) => {
-       try { await sock.sendMessage(jid, { text }); } 
-       catch (e) { console.error(e); }
-    });
-
-    socket.on('send_media', async ({ jid, fileBase64, type, caption, isVoice }) => {
-        try {
-            const b64 = fileBase64.replace(/^data:.*?;base64,/, "");
-            const buff = Buffer.from(b64, 'base64');
-            
-            let messageContent = {};
-
-            if (type === 'audio') {
-                messageContent = { audio: buff, ptt: isVoice, mimetype: 'audio/mp4' };
-            } else if (type === 'video') {
-                messageContent = { video: buff, caption, mimetype: 'video/mp4' };
-            } else {
-                messageContent = { image: buff, caption };
-            }
-
-            await sock.sendMessage(jid, messageContent);
-        } catch(e) { console.error('Error sending media', e); }
-    });
-
-    socket.on('post_status', async ({ fileBase64, type, caption, background }) => {
-        try {
-            const jid = 'status@broadcast';
-            if (type === 'text') {
-                 await sock.sendMessage(jid, { text: caption, backgroundArgb: 0xFF000000 });
-            } else {
-                const b64 = fileBase64.replace(/^data:.*?;base64,/, "");
-                const buff = Buffer.from(b64, 'base64');
-                let content = type === 'video' ? { video: buff, caption } : { image: buff, caption };
-                await sock.sendMessage(jid, content);
-            }
-        } catch(e) { console.error(e); }
-    });
-
-    socket.on('get_group_info', async (jid) => {
-        try {
-            const metadata = await sock.groupMetadata(jid);
-            socket.emit('group_info', metadata);
-        } catch(e) { console.error(e); }
-    });
-
-    socket.on('group_action', async ({ jid, action, participants }) => {
-        try {
-            await sock.groupParticipantsUpdate(jid, participants, action);
-        } catch(e) { console.error(e); }
-    });
-
-    // --- WebRTC Signaling Logic ---
-    // This allows calls between users connected to this web interface
-    
-    socket.on("call_user", (data) => {
-        // data: { userToCall, signalData, from }
-        // Broadcast to all clients (in a real app, emit to specific socket ID)
-        socket.broadcast.emit("call_made", {
-            signal: data.signalData,
-            from: data.from
-        });
-    });
-
-    socket.on("answer_call", (data) => {
-        // data: { to, signal }
-        socket.broadcast.emit("call_answered", {
-            signal: data.signal,
-            to: data.to
-        });
-    });
-
-    socket.on("ice_candidate", (data) => {
-        socket.broadcast.emit("ice_candidate_received", data);
-    });
-
-    socket.on("end_call", () => {
-        socket.broadcast.emit("call_ended");
-    });
-  });
 }
 
 connectToWhatsApp();
+
+io.on('connection', (socket) => {
+
+  if (sock?.user) {
+      socket.emit('ready', {
+          id: sock.user.id.split(':')[0] + '@s.whatsapp.net',
+          name: sock.user.name || 'Me'
+      });
+      const chats = store.chats.all().sort((a,b) => b.conversationTimestamp - a.conversationTimestamp);
+      socket.emit('chats', chats.slice(0, 50));
+  }
+
+  socket.on('request_pairing_code', async (phoneNumber) => {
+      try {
+          const code = await sock.requestPairingCode(phoneNumber);
+          socket.emit('pairing_code', code);
+      } catch (e) {
+          console.error('Error requesting pairing code', e);
+          socket.emit('error', 'Could not request pairing code');
+      }
+  });
+
+  socket.on('send_message', async ({ jid, text }) => {
+     try { await sock.sendMessage(jid, { text }); }
+     catch (e) { console.error(e); }
+  });
+
+  socket.on('send_media', async ({ jid, fileBase64, type, caption, isVoice }) => {
+      try {
+          const b64 = fileBase64.replace(/^data:.*?;base64,/, "");
+          const buff = Buffer.from(b64, 'base64');
+
+          let messageContent = {};
+
+          if (type === 'audio') {
+              messageContent = { audio: buff, ptt: isVoice, mimetype: 'audio/mp4' };
+          } else if (type === 'video') {
+              messageContent = { video: buff, caption, mimetype: 'video/mp4' };
+          } else {
+              messageContent = { image: buff, caption };
+          }
+
+          await sock.sendMessage(jid, messageContent);
+      } catch(e) { console.error('Error sending media', e); }
+  });
+
+  socket.on('post_status', async ({ fileBase64, type, caption, background }) => {
+      try {
+          const jid = 'status@broadcast';
+          if (type === 'text') {
+               await sock.sendMessage(jid, { text: caption, backgroundArgb: 0xFF000000 });
+          } else {
+              const b64 = fileBase64.replace(/^data:.*?;base64,/, "");
+              const buff = Buffer.from(b64, 'base64');
+              let content = type === 'video' ? { video: buff, caption } : { image: buff, caption };
+              await sock.sendMessage(jid, content);
+          }
+      } catch(e) { console.error(e); }
+  });
+
+  socket.on('get_group_info', async (jid) => {
+      try {
+          const metadata = await sock.groupMetadata(jid);
+          socket.emit('group_info', metadata);
+      } catch(e) { console.error(e); }
+  });
+
+  socket.on('group_action', async ({ jid, action, participants }) => {
+      try {
+          await sock.groupParticipantsUpdate(jid, participants, action);
+      } catch(e) { console.error(e); }
+  });
+
+  // --- WebRTC Signaling Logic ---
+  // This allows calls between users connected to this web interface
+
+  socket.on("call_user", (data) => {
+      // data: { userToCall, signalData, from }
+      // Broadcast to all clients (in a real app, emit to specific socket ID)
+      socket.broadcast.emit("call_made", {
+          signal: data.signalData,
+          from: data.from
+      });
+  });
+
+  socket.on("answer_call", (data) => {
+      // data: { to, signal }
+      socket.broadcast.emit("call_answered", {
+          signal: data.signal,
+          to: data.to
+      });
+  });
+
+  socket.on("ice_candidate", (data) => {
+      socket.broadcast.emit("ice_candidate_received", data);
+  });
+
+  socket.on("end_call", () => {
+      socket.broadcast.emit("call_ended");
+  });
+});
 
 const PORT = 3001;
 server.listen(PORT, () => {
