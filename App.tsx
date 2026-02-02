@@ -22,6 +22,7 @@ const App: React.FC = () => {
   
   const [chats, setChats] = useState<ChatSession[]>([]);
   const [statusUpdates, setStatusUpdates] = useState<any[]>([]);
+  const [presences, setPresences] = useState<Record<string, any>>({});
   const [currentUser, setCurrentUser] = useState<User>({ id: '', name: '', avatar: '' });
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   
@@ -86,10 +87,38 @@ const App: React.FC = () => {
       }));
       setChats(formattedChats);
       
+      // Request avatars for all chats
+      rawChats.forEach(c => {
+          socket.emit('get_profile_pic', c.id);
+      });
+
       // Auto select first chat if none active and we just connected
       if (!activeChatId && formattedChats.length > 0) {
           setActiveChatId(formattedChats[0].id);
       }
+    });
+
+    socket.on('profile_pic', ({ jid, url }: { jid: string, url: string }) => {
+        setChats(prev => prev.map(c =>
+            c.id === jid ? { ...c, contact: { ...c.contact, avatar: url } } : c
+        ));
+        if (currentUser.id === jid) {
+            setCurrentUser(prev => ({ ...prev, avatar: url }));
+        }
+    });
+
+    socket.on('messages', ({ jid, messages }: { jid: string, messages: any[] }) => {
+        const normalized = messages.map(m => normalizeMessage(m));
+        setChats(prev => prev.map(c =>
+            c.id === jid ? { ...c, messages: normalized } : c
+        ));
+    });
+
+    socket.on('presence', (update: any) => {
+        setPresences(prev => ({
+            ...prev,
+            [update.id]: update.presences
+        }));
     });
 
     socket.on('message', async (payload: any) => {
@@ -172,6 +201,9 @@ const App: React.FC = () => {
       socket.off('message');
       socket.off('status_update');
       socket.off('group_info');
+      socket.off('profile_pic');
+      socket.off('messages');
+      socket.off('presence');
       socket.off('native_call');
       socket.off('call_made');
       socket.off('call_ended');
@@ -188,6 +220,7 @@ const App: React.FC = () => {
   const handleSelectChat = (id: string) => {
     setActiveChatId(id);
     setSideView(SideBarView.CHATS);
+    socket.emit('fetch_messages', id);
     setChats(prev => prev.map(c => 
         c.id === id ? { ...c, unreadCount: 0 } : c
     ));
@@ -290,6 +323,7 @@ const App: React.FC = () => {
             chats={chats}
             statusUpdates={statusUpdates}
             activeChatId={activeChatId}
+            presences={presences}
             currentView={sideView}
             onChangeView={setSideView}
             onSelectChat={handleSelectChat}
@@ -311,6 +345,7 @@ const App: React.FC = () => {
                     onSendAudio={handleSendAudio}
                     onOpenInfo={() => setShowGroupInfo(true)}
                     onCall={() => startCall(true)}
+                    presence={presences[activeChat.id]}
                 />
                 
                 {/* Full Featured Call Modal */}

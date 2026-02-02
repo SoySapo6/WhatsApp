@@ -36,6 +36,7 @@ const io = new Server(server, {
 });
 
 let sock;
+let lastQr = null;
 
 async function getMedia(msg) {
     const msgType = getContentType(msg.message);
@@ -79,7 +80,7 @@ async function connectToWhatsApp() {
     printQRInTerminal: false,
     syncFullHistory: false,
     generateHighQualityLinkPreview: true,
-    browser: ["WhatsApp Clone", "Chrome", "10.0"],
+    browser: ["Ubuntu", "Chrome", "20.0.04"],
   });
 
   store.bind(sock.ev);
@@ -102,8 +103,8 @@ async function connectToWhatsApp() {
     const { connection, lastDisconnect, qr } = update;
     
     if (qr) {
-      const qrImage = await qrcode.toDataURL(qr);
-      io.emit('qr', qrImage);
+      lastQr = await qrcode.toDataURL(qr);
+      io.emit('qr', lastQr);
     }
 
     if (connection === 'close') {
@@ -172,7 +173,34 @@ io.on('connection', (socket) => {
       });
       const chats = store.chats.all().sort((a,b) => b.conversationTimestamp - a.conversationTimestamp);
       socket.emit('chats', chats.slice(0, 50));
+  } else if (lastQr) {
+      socket.emit('qr', lastQr);
   }
+
+  socket.on('get_profile_pic', async (jid) => {
+      try {
+          const url = await sock.profilePictureUrl(jid, 'image');
+          socket.emit('profile_pic', { jid, url });
+      } catch (e) {
+          // ignore if no pp
+      }
+  });
+
+  socket.on('fetch_messages', async (jid) => {
+      try {
+          const messages = await store.loadMessages(jid, 50);
+          const messagesWithMedia = await Promise.all(messages.map(async (msg) => {
+              let mediaData = null;
+              try {
+                  mediaData = await getMedia(msg);
+              } catch(e) {}
+              return { raw: msg, media: mediaData };
+          }));
+          socket.emit('messages', { jid, messages: messagesWithMedia });
+      } catch (e) {
+          console.error('Error fetching messages', e);
+      }
+  });
 
   socket.on('request_pairing_code', async (phoneNumber) => {
       try {

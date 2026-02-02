@@ -42,9 +42,15 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isMe }) =
                     <audio src={message.mediaUrl} controls className="h-8 w-full max-w-[200px]" />
                 </div>
             )}
+
+            {message.type === 'sticker' && message.mediaUrl && (
+                <div className="p-1">
+                    <img src={message.mediaUrl} alt="Sticker" className="w-[150px] h-[150px] object-contain" />
+                </div>
+            )}
             
             {(message.text || (!message.mediaUrl && message.type === 'text')) && (
-                <div className="px-2 pt-1 pb-4 text-[#e9edef] min-w-[80px]">
+                <div className="px-2 pt-1 pb-4 text-[#e9edef] min-w-[80px] whitespace-pre-wrap break-words">
                     {message.text}
                 </div>
             )}
