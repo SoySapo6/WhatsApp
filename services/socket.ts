@@ -24,10 +24,18 @@ export const normalizeMessage = (payload: any): any => {
         content = rawMsg.message.videoMessage.caption || "";
     } else if (rawMsg.message?.audioMessage) {
         type = 'audio';
+    } else if (rawMsg.message?.stickerMessage) {
+        type = 'sticker';
     } else if (rawMsg.message?.conversation) {
         content = rawMsg.message.conversation;
     } else if (rawMsg.message?.extendedTextMessage) {
         content = rawMsg.message.extendedTextMessage.text;
+    } else if (rawMsg.message?.buttonsResponseMessage) {
+        content = rawMsg.message.buttonsResponseMessage.selectedDisplayText;
+    } else if (rawMsg.message?.listResponseMessage) {
+        content = rawMsg.message.listResponseMessage.title;
+    } else if (rawMsg.message?.templateButtonReplyMessage) {
+        content = rawMsg.message.templateButtonReplyMessage.selectedDisplayText;
     }
 
     return {

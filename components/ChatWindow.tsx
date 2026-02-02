@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChatSession } from '../types';
+import { ChatSession, Presence } from '../types';
 import { Icons } from './Icons';
 import { MessageBubble } from './MessageBubble';
 
@@ -11,9 +11,10 @@ interface ChatWindowProps {
   onSendAudio: (chatId: string, base64: string) => void;
   onOpenInfo: () => void;
   onCall: () => void;
+  presence?: any;
 }
 
-export const ChatWindow: React.FC<ChatWindowProps> = ({ chat, onBack, onSendMessage, onSendImage, onSendAudio, onOpenInfo, onCall }) => {
+export const ChatWindow: React.FC<ChatWindowProps> = ({ chat, onBack, onSendMessage, onSendImage, onSendAudio, onOpenInfo, onCall, presence }) => {
   const [inputText, setInputText] = useState('');
   const [showAttach, setShowAttach] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -114,7 +115,11 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ chat, onBack, onSendMess
             <div className="flex flex-col justify-center">
                 <span className="text-[#e9edef] text-base leading-tight">{chat.contact.name}</span>
                 <span className="text-[#8696a0] text-xs mt-0.5">
-                    {chat.presence === 'composing' ? 'typing...' : (chat.contact.status || 'click for info')}
+                    {presence ? (
+                        (Object.values(presence)[0] as Presence)?.lastKnownPresence === 'composing' ? 'typing...' :
+                        (Object.values(presence)[0] as Presence)?.lastKnownPresence === 'available' ? 'online' :
+                        (chat.contact.status || 'click for info')
+                    ) : (chat.contact.status || 'click for info')}
                 </span>
             </div>
         </div>

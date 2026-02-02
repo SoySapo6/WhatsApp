@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { ChatSession, User, SideBarView } from '../types';
+import { ChatSession, User, SideBarView, Presence } from '../types';
 import { Icons } from './Icons';
 import { format } from 'date-fns';
 
@@ -8,13 +8,14 @@ interface SidebarProps {
   chats: ChatSession[];
   statusUpdates: any[];
   activeChatId: string | null;
+  presences: Record<string, any>;
   currentView: SideBarView;
   onSelectChat: (id: string) => void;
   onChangeView: (view: SideBarView) => void;
   onUploadStatus: (file: string, type: 'image'|'video') => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentUser, chats, statusUpdates, activeChatId, currentView, onSelectChat, onChangeView, onUploadStatus }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ currentUser, chats, statusUpdates, activeChatId, presences, currentView, onSelectChat, onChangeView, onUploadStatus }) => {
   const statusInputRef = useRef<HTMLInputElement>(null);
 
   const handleStatusFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -121,6 +122,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentUser, chats, statusUpda
                                 alt={chat.contact.name} 
                                 className="w-12 h-12 rounded-full object-cover"
                             />
+                            {presences[chat.id] && (Object.values(presences[chat.id])[0] as Presence)?.lastKnownPresence === 'available' && (
+                                <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#00a884] rounded-full border-2 border-[#111b21]"></div>
+                            )}
                         </div>
                         
                         <div className="flex-1 ml-3 border-b border-wa-border pb-3 flex flex-col justify-center h-full min-w-0">

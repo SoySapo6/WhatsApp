@@ -59,3 +59,8 @@ export enum SideBarView {
   CHANNELS,
   COMMUNITIES
 }
+
+export interface Presence {
+  lastKnownPresence: 'composing' | 'recording' | 'available' | 'unavailable';
+  lastSeen?: number;
+}
