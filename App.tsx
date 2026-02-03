@@ -475,7 +475,7 @@ const App: React.FC = () => {
     );
   }
 
-  const activeChat = chats.find(c => c.id === activeChatId);
+  const activeChat = activeChatId ? chats.find(c => c.id === activeChatId) : null;
 
   const isMainList = location.pathname === '/' || location.pathname === '/status' || location.pathname === '/calls' || location.pathname === '/profile' || location.pathname === '/settings' || location.pathname === '/new';
 

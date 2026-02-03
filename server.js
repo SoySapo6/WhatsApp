@@ -40,8 +40,19 @@ let sock;
 let lastQr = null;
 const ppCache = new Map();
 
+const isExcluded = (jid) => {
+    if (!jid) return true;
+    if (isJidBroadcast(jid)) return true;
+    if (jid === 'status@broadcast') return true;
+    if (jid.endsWith('@newsletter')) return true;
+    return false;
+};
+
 async function getMedia(msg) {
+    if (!msg?.message) return null;
     const msgType = getContentType(msg.message);
+    if (!msgType) return null;
+
     let stream;
     let type = 'text';
 
@@ -109,14 +120,6 @@ async function connectToWhatsApp() {
           isVideo: call[0].isVideo
       });
   });
-
-  const isExcluded = (jid) => {
-      if (!jid) return true;
-      if (isJidBroadcast(jid)) return true;
-      if (jid === 'status@broadcast') return true;
-      if (jid.endsWith('@newsletter')) return true;
-      return false;
-  };
 
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
@@ -285,11 +288,13 @@ async function connectToWhatsApp() {
 connectToWhatsApp();
 
 io.on('connection', (socket) => {
-  
+  console.log('Socket client connected:', socket.id);
+
   if (sock?.user) {
       socket.emit('ready', {
           id: sock.user.id.split(':')[0] + '@s.whatsapp.net',
-          name: sock.user.name || 'Me' 
+          name: sock.user.name || 'Me',
+          avatar: ppCache.get(sock.user.id.split(':')[0] + '@s.whatsapp.net') || ''
       });
       const chats = store.chats.all()
         .filter(c => !isExcluded(c.id))
@@ -310,12 +315,13 @@ io.on('connection', (socket) => {
       socket.emit('contacts', contacts);
 
       // Fetch status history
-      store.loadMessages('status@broadcast', 20).then(msgs => {
+      if (store.messages['status@broadcast']) {
+          const msgs = store.messages['status@broadcast'].all().slice(-20);
           msgs.forEach(async m => {
               const media = await getMedia(m).catch(() => null);
               socket.emit('status_update', { raw: m, media, isStatus: true });
           });
-      }).catch(() => {});
+      }
 
   } else if (lastQr) {
       socket.emit('qr', lastQr);
@@ -337,12 +343,20 @@ io.on('connection', (socket) => {
 
   socket.on('fetch_messages', async (jid) => {
       try {
-          const messages = await store.loadMessages(jid, 50);
+          // Robustly get messages from store
+          let messages = [];
+          if (store.messages[jid]) {
+              messages = store.messages[jid].all().slice(-50);
+          } else {
+              messages = await store.loadMessages(jid, 50).catch(() => []);
+          }
 
           // Mark as read
           if (messages.length > 0) {
               const lastMsg = messages[messages.length - 1];
-              await sock.readMessages([lastMsg.key]);
+              if (lastMsg?.key) {
+                  await sock.readMessages([lastMsg.key]).catch(() => {});
+              }
           }
 
           const messagesWithMedia = await Promise.all(messages.map(async (msg) => {
@@ -354,7 +368,7 @@ io.on('connection', (socket) => {
           }));
           socket.emit('messages', { jid, messages: messagesWithMedia });
       } catch (e) {
-          console.error('Error fetching messages', e);
+          console.error('Error fetching messages for', jid, e);
       }
   });
 

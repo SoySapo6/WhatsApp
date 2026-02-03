@@ -108,6 +108,15 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ chat, onBack, onSendMess
       }
   };
 
+  if (!chat || !chat.messages) {
+      return (
+          <div className="flex flex-col h-full bg-[#0b141a] items-center justify-center text-[#8696a0]">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#00a884] mb-4"></div>
+              <p>Loading messages...</p>
+          </div>
+      );
+  }
+
   return (
     <div className="flex flex-col h-full bg-[#0b141a] relative">
       <div className="absolute inset-0 z-0 opacity-10 pointer-events-none" 
