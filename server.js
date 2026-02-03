@@ -38,6 +38,7 @@ const io = new Server(server, {
 
 let sock;
 let lastQr = null;
+const ppCache = new Map();
 
 async function getMedia(msg) {
     const msgType = getContentType(msg.message);
@@ -226,6 +227,43 @@ async function connectToWhatsApp() {
       io.emit('chats', formatted);
   });
 
+  sock.ev.on('chats.set', ({ chats }) => {
+      const formatted = chats.filter(c => !isExcluded(c.id)).map(chat => {
+          const contact = store.contacts[chat.id];
+          return {
+              ...chat,
+              name: chat.name || chat.subject || contact?.name || contact?.notify || chat.id.split('@')[0]
+          };
+      });
+      io.emit('chats', formatted);
+  });
+
+  sock.ev.on('contacts.set', ({ contacts }) => {
+      const formatted = contacts.map(c => ({
+          ...c,
+          name: c.name || c.notify || c.id.split('@')[0]
+      }));
+      io.emit('contacts', formatted);
+  });
+
+  sock.ev.on('messaging-history.set', ({ chats, contacts, messages, isLatest }) => {
+      console.log(`History Sync: ${chats.length} chats, ${contacts.length} contacts, ${messages.length} messages`);
+      const formattedChats = chats.filter(c => !isExcluded(c.id)).map(chat => {
+          const contact = contacts.find(con => con.id === chat.id) || store.contacts[chat.id];
+          return {
+              ...chat,
+              name: chat.name || chat.subject || contact?.name || contact?.notify || chat.id.split('@')[0]
+          };
+      });
+      io.emit('chats', formattedChats);
+
+      const formattedContacts = contacts.map(c => ({
+          ...c,
+          name: c.name || c.notify || c.id.split('@')[0]
+      }));
+      io.emit('contacts', formattedContacts);
+  });
+
   sock.ev.on('contacts.upsert', (contacts) => {
       const formatted = contacts.map(c => ({
           ...c,
@@ -285,8 +323,12 @@ io.on('connection', (socket) => {
 
   socket.on('get_profile_pic', async (jid) => {
       if (!sock) return;
+      if (ppCache.has(jid)) {
+          return socket.emit('profile_pic', { jid, url: ppCache.get(jid) });
+      }
       try {
           const url = await sock.profilePictureUrl(jid, 'image').catch(() => null);
+          if (url) ppCache.set(jid, url);
           socket.emit('profile_pic', { jid, url });
       } catch (e) {
           socket.emit('profile_pic', { jid, url: null });

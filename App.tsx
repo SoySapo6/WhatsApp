@@ -107,23 +107,29 @@ const App: React.FC = () => {
 
     socket.on('chats', (rawChats: any[]) => {
       setChats(prev => {
-          const newChats: ChatSession[] = rawChats.map(c => {
-              const existing = prev.find(p => p.id === c.id);
+          const merged = [...prev];
+          rawChats.forEach(c => {
+              const index = merged.findIndex(p => p.id === c.id);
               const name = c.name || c.id.split('@')[0];
-              return {
+              const formattedChat: ChatSession = {
                 id: c.id,
                 contact: {
                     id: c.id,
                     name: name,
-                    avatar: existing?.contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`
+                    avatar: merged[index]?.contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`
                 },
-                messages: existing?.messages || [],
-                unreadCount: c.unreadCount || 0,
-                lastMessageTime: c.conversationTimestamp ? c.conversationTimestamp * 1000 : (existing?.lastMessageTime || Date.now()),
+                messages: merged[index]?.messages || [],
+                unreadCount: typeof c.unreadCount === 'number' ? c.unreadCount : (merged[index]?.unreadCount || 0),
+                lastMessageTime: c.conversationTimestamp ? c.conversationTimestamp * 1000 : (merged[index]?.lastMessageTime || Date.now()),
                 isGroup: c.id.includes('@g.us')
               };
+              if (index !== -1) {
+                  merged[index] = { ...merged[index], ...formattedChat };
+              } else {
+                  merged.push(formattedChat);
+              }
           });
-          return newChats;
+          return merged.sort((a,b) => b.lastMessageTime - a.lastMessageTime);
       });
       
       // Request avatars for all chats
@@ -133,22 +139,22 @@ const App: React.FC = () => {
     });
 
     socket.on('profile_pic', ({ jid, url }: { jid: string, url: string | null }) => {
-        const newAvatar = url || `https://ui-avatars.com/api/?name=${encodeURIComponent(jid)}&background=random&color=fff`;
+        if (!url) return;
 
         setChats(prev => prev.map(c =>
             c.id === jid ? {
                 ...c,
-                contact: { ...c.contact, avatar: newAvatar }
+                contact: { ...c.contact, avatar: url }
             } : c
         ));
 
         setContacts(prev => prev.map(c =>
-            c.id === jid ? { ...c, avatar: newAvatar } : c
+            c.id === jid ? { ...c, avatar: url } : c
         ));
-        // Use a ref-like check or compare with currentUser.id
+
         setCurrentUser(prev => {
-            if (prev.id === jid) {
-                return { ...prev, avatar: url || prev.avatar };
+            if (prev.id === jid || (prev.id.split(':')[0] === jid.split(':')[0])) {
+                return { ...prev, avatar: url };
             }
             return prev;
         });
@@ -413,6 +419,10 @@ const App: React.FC = () => {
         }
     } else if (path === '/status') {
         setSideView(SideBarView.STATUS);
+        setActiveChatId(null);
+    } else if (path === '/calls') {
+        setSideView(SideBarView.CALLS);
+        setActiveChatId(null);
     } else if (path === '/profile') {
         setSideView(SideBarView.PROFILE);
     } else if (path === '/settings') {
@@ -433,6 +443,7 @@ const App: React.FC = () => {
       switch(view) {
           case SideBarView.CHATS: navigate('/'); break;
           case SideBarView.STATUS: navigate('/status'); break;
+          case SideBarView.CALLS: navigate('/calls'); break;
           case SideBarView.PROFILE: navigate('/profile'); break;
           case SideBarView.SETTINGS: navigate('/settings'); break;
           case SideBarView.NEW_CHAT: navigate('/new'); break;
@@ -466,6 +477,8 @@ const App: React.FC = () => {
 
   const activeChat = chats.find(c => c.id === activeChatId);
 
+  const isMainList = location.pathname === '/' || location.pathname === '/status' || location.pathname === '/calls' || location.pathname === '/profile' || location.pathname === '/settings' || location.pathname === '/new';
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#111b21] md:p-4">
       <div className="w-full max-w-[1600px] mx-auto h-full flex shadow-lg relative bg-[#111b21] overflow-hidden">
@@ -473,7 +486,7 @@ const App: React.FC = () => {
         {/* Sidebar - Hidden on mobile if a chat is active */}
         <div className={`
             w-full md:w-[400px] flex-shrink-0 h-full bg-[#111b21] z-20 transition-all duration-300
-            ${activeChatId ? 'hidden md:block' : 'block'}
+            ${!isMainList && window.innerWidth < 768 ? 'hidden md:block' : 'block'}
         `}>
           <Sidebar 
             currentUser={currentUser}
@@ -497,7 +510,7 @@ const App: React.FC = () => {
         {/* Main Content Area */}
         <div className={`
             flex-1 h-full bg-[#222e35] relative flex flex-col
-            ${!activeChatId ? 'hidden md:flex' : 'flex'}
+            ${isMainList && window.innerWidth < 768 ? 'hidden md:flex' : 'flex'}
         `}>
           <Routes>
             <Route path="/" element={
@@ -539,6 +552,7 @@ const App: React.FC = () => {
             <Route path="/status" element={<div className="flex-1 bg-[#111b21] md:bg-[#222e35]"></div>} />
             <Route path="/profile" element={<div className="flex-1 bg-[#111b21] md:bg-[#222e35]"></div>} />
             <Route path="/settings" element={<div className="flex-1 bg-[#111b21] md:bg-[#222e35]"></div>} />
+            <Route path="/calls" element={<div className="flex-1 bg-[#111b21] md:bg-[#222e35]"></div>} />
             <Route path="/new" element={<div className="flex-1 bg-[#111b21] md:bg-[#222e35]"></div>} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
