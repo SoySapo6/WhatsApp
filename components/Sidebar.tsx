@@ -55,6 +55,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentUser, chats, contacts, 
             <button title="Status" onClick={() => onChangeView(SideBarView.STATUS)}>
                 <Icons.Status className={`w-6 h-6 ${currentView === SideBarView.STATUS ? 'text-[#00a884]' : ''}`} />
             </button>
+            <button title="Calls" onClick={() => onChangeView(SideBarView.CALLS)}>
+                <Icons.Phone className={`w-6 h-6 ${currentView === SideBarView.CALLS ? 'text-[#00a884]' : ''}`} />
+            </button>
             <button title="Channels" onClick={() => onChangeView(SideBarView.CHANNELS)}>
                 <Icons.Chat className={`w-6 h-6 ${currentView === SideBarView.CHANNELS ? 'text-[#00a884]' : ''}`} />
             </button>
@@ -312,6 +315,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentUser, chats, contacts, 
                             </div>
                         </div>
                     ))}
+                </div>
+            </div>
+        )
+    }
+
+    if (currentView === SideBarView.CALLS) {
+        return (
+            <div className="p-4 text-[#e9edef] h-full flex flex-col">
+                <h2 className="text-xl font-light mb-4">Calls</h2>
+                <div className="flex-1 flex flex-col items-center justify-center text-center px-10">
+                    <div className="bg-[#202c33] p-5 rounded-full mb-6">
+                        <Icons.Phone className="w-12 h-12 text-[#8696a0]" />
+                    </div>
+                    <p className="text-lg mb-2">No recent calls</p>
+                    <p className="text-[#8696a0] text-sm">Call history will appear here once you start or receive calls.</p>
                 </div>
             </div>
         )

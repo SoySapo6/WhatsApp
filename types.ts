@@ -60,7 +60,8 @@ export enum SideBarView {
   COMMUNITIES,
   NEW_CHAT,
   PROFILE,
-  SETTINGS
+  SETTINGS,
+  CALLS
 }
 
 export interface Presence {

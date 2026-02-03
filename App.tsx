@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { format } from 'date-fns';
+import { Routes, Route, useNavigate, useParams, useLocation, Navigate } from 'react-router-dom';
 import { ViewState, ChatSession, Message, User, SideBarView, GroupMetadata } from './types';
 import { Login } from './components/Login';
 import { Sidebar } from './components/Sidebar';
@@ -18,6 +19,10 @@ const rtcConfig = {
 };
 
 const App: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { jid: paramJid } = useParams();
+
   const [viewState, setViewState] = useState<ViewState>(ViewState.CONNECTING);
   const [sideView, setSideView] = useState<SideBarView>(SideBarView.CHATS);
   
@@ -95,29 +100,36 @@ const App: React.FC = () => {
         const formatted: User[] = rawContacts.map(c => ({
             id: c.id,
             name: c.name || c.id.split('@')[0],
-            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name || c.id)}&background=random&color=fff`
+            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name || c.id.split('@')[0])}&background=random&color=fff`
         }));
         setContacts(formatted);
     });
 
     socket.on('chats', (rawChats: any[]) => {
       setChats(prev => {
-          const newChats: ChatSession[] = rawChats.map(c => {
-              const existing = prev.find(p => p.id === c.id);
-              return {
+          const merged = [...prev];
+          rawChats.forEach(c => {
+              const index = merged.findIndex(p => p.id === c.id);
+              const name = c.name || c.id.split('@')[0];
+              const formattedChat: ChatSession = {
                 id: c.id,
                 contact: {
                     id: c.id,
-                    name: c.name || c.id.split('@')[0],
-                    avatar: existing?.contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name || c.id)}&background=random&color=fff`
+                    name: name,
+                    avatar: merged[index]?.contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`
                 },
-                messages: existing?.messages || [],
-                unreadCount: c.unreadCount || 0,
-                lastMessageTime: c.conversationTimestamp ? c.conversationTimestamp * 1000 : (existing?.lastMessageTime || Date.now()),
+                messages: merged[index]?.messages || [],
+                unreadCount: typeof c.unreadCount === 'number' ? c.unreadCount : (merged[index]?.unreadCount || 0),
+                lastMessageTime: c.conversationTimestamp ? c.conversationTimestamp * 1000 : (merged[index]?.lastMessageTime || Date.now()),
                 isGroup: c.id.includes('@g.us')
               };
+              if (index !== -1) {
+                  merged[index] = { ...merged[index], ...formattedChat };
+              } else {
+                  merged.push(formattedChat);
+              }
           });
-          return newChats;
+          return merged.sort((a,b) => b.lastMessageTime - a.lastMessageTime);
       });
       
       // Request avatars for all chats
@@ -127,22 +139,22 @@ const App: React.FC = () => {
     });
 
     socket.on('profile_pic', ({ jid, url }: { jid: string, url: string | null }) => {
-        const newAvatar = url || `https://ui-avatars.com/api/?name=${encodeURIComponent(jid)}&background=random&color=fff`;
+        if (!url) return;
 
         setChats(prev => prev.map(c =>
             c.id === jid ? {
                 ...c,
-                contact: { ...c.contact, avatar: newAvatar }
+                contact: { ...c.contact, avatar: url }
             } : c
         ));
 
         setContacts(prev => prev.map(c =>
-            c.id === jid ? { ...c, avatar: newAvatar } : c
+            c.id === jid ? { ...c, avatar: url } : c
         ));
-        // Use a ref-like check or compare with currentUser.id
+
         setCurrentUser(prev => {
-            if (prev.id === jid) {
-                return { ...prev, avatar: url || prev.avatar };
+            if (prev.id === jid || (prev.id.split(':')[0] === jid.split(':')[0])) {
+                return { ...prev, avatar: url };
             }
             return prev;
         });
@@ -181,6 +193,11 @@ const App: React.FC = () => {
       setChats(prevChats => {
         const chatExists = prevChats.find(c => c.id === chatId);
         
+        // Request avatar if not present
+        if (!chatExists || !chatExists.contact.avatar.includes('data:image') && chatExists.contact.avatar.includes('ui-avatars')) {
+            socket.emit('get_profile_pic', chatId);
+        }
+
         if (chatExists) {
             return prevChats.map(c => {
                 if (c.id === chatId) {
@@ -194,12 +211,13 @@ const App: React.FC = () => {
                 return c;
             }).sort((a, b) => b.lastMessageTime - a.lastMessageTime);
         } else {
+            const name = msg.pushName || chatId.replace('@s.whatsapp.net', '');
             const newChat: ChatSession = {
                 id: chatId,
                 contact: {
                     id: chatId,
-                    name: msg.pushName || chatId.replace('@s.whatsapp.net', ''),
-                    avatar: 'https://via.placeholder.com/50'
+                    name: name,
+                    avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`
                 },
                 messages: [msg],
                 unreadCount: msg.key.fromMe ? 0 : 1,
@@ -284,6 +302,7 @@ const App: React.FC = () => {
     setChats(prev => prev.map(c => 
         c.id === id ? { ...c, unreadCount: 0 } : c
     ));
+    navigate(`/chat/${id}`);
   };
 
   const handleSendMessage = useCallback(async (chatId: string, text: string) => {
@@ -390,18 +409,46 @@ const App: React.FC = () => {
       socket.emit('end_call');
   };
 
-  if (viewState === ViewState.LOGIN || viewState === ViewState.CONNECTING) {
-    return (
-        <Login 
-            qrCode={qrCode} 
-            status={connectionStatus} 
-            pairingCode={pairingCode}
-            onRequestPairing={handleRequestPairing}
-        />
-    );
-  }
+  useEffect(() => {
+    const path = location.pathname;
+    if (path.startsWith('/chat/')) {
+        const jid = path.replace('/chat/', '');
+        if (jid && jid !== activeChatId) {
+            setActiveChatId(jid);
+            socket.emit('fetch_messages', jid);
+        }
+    } else if (path === '/status') {
+        setSideView(SideBarView.STATUS);
+        setActiveChatId(null);
+    } else if (path === '/calls') {
+        setSideView(SideBarView.CALLS);
+        setActiveChatId(null);
+    } else if (path === '/profile') {
+        setSideView(SideBarView.PROFILE);
+    } else if (path === '/settings') {
+        setSideView(SideBarView.SETTINGS);
+    } else if (path === '/') {
+        setSideView(SideBarView.CHATS);
+        setActiveChatId(null);
+    }
+  }, [location.pathname, chats]);
 
-  const activeChat = chats.find(c => c.id === activeChatId);
+  const handleBack = () => {
+      setActiveChatId(null);
+      navigate('/');
+  };
+
+  const handleChangeView = (view: SideBarView) => {
+      setSideView(view);
+      switch(view) {
+          case SideBarView.CHATS: navigate('/'); break;
+          case SideBarView.STATUS: navigate('/status'); break;
+          case SideBarView.CALLS: navigate('/calls'); break;
+          case SideBarView.PROFILE: navigate('/profile'); break;
+          case SideBarView.SETTINGS: navigate('/settings'); break;
+          case SideBarView.NEW_CHAT: navigate('/new'); break;
+      }
+  };
 
   const handleViewStatus = (statuses: any[]) => {
       setActiveStatus(statuses);
@@ -417,13 +464,29 @@ const App: React.FC = () => {
       }
   };
 
+  if (viewState === ViewState.LOGIN || viewState === ViewState.CONNECTING) {
+    return (
+        <Login
+            qrCode={qrCode}
+            status={connectionStatus}
+            pairingCode={pairingCode}
+            onRequestPairing={handleRequestPairing}
+        />
+    );
+  }
+
+  const activeChat = chats.find(c => c.id === activeChatId);
+
+  const isMainList = location.pathname === '/' || location.pathname === '/status' || location.pathname === '/calls' || location.pathname === '/profile' || location.pathname === '/settings' || location.pathname === '/new';
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#111b21] md:p-4">
       <div className="w-full max-w-[1600px] mx-auto h-full flex shadow-lg relative bg-[#111b21] overflow-hidden">
         
+        {/* Sidebar - Hidden on mobile if a chat is active */}
         <div className={`
             w-full md:w-[400px] flex-shrink-0 h-full bg-[#111b21] z-20 transition-all duration-300
-            ${activeChatId ? 'hidden md:block' : 'block'}
+            ${!isMainList && window.innerWidth < 768 ? 'hidden md:block' : 'block'}
         `}>
           <Sidebar 
             currentUser={currentUser}
@@ -433,7 +496,7 @@ const App: React.FC = () => {
             activeChatId={activeChatId}
             presences={presences}
             currentView={sideView}
-            onChangeView={setSideView}
+            onChangeView={handleChangeView}
             onSelectChat={handleSelectChat}
             onUploadStatus={handleUploadStatus}
             onNewChat={handleNewChat}
@@ -444,43 +507,56 @@ const App: React.FC = () => {
           />
         </div>
 
+        {/* Main Content Area */}
         <div className={`
             flex-1 h-full bg-[#222e35] relative flex flex-col
-            ${!activeChatId ? 'hidden md:flex' : 'flex'}
+            ${isMainList && window.innerWidth < 768 ? 'hidden md:flex' : 'flex'}
         `}>
-          {activeChat ? (
-             <div className="flex-1 flex flex-col relative">
-                <ChatWindow 
-                    chat={activeChat} 
-                    onBack={() => {
-                        setActiveChatId(null);
-                        socket.emit('send_presence', { jid: activeChat.id, presence: 'unavailable' });
-                    }}
-                    onSendMessage={handleSendMessage}
-                    onSendImage={handleSendImage}
-                    onSendAudio={handleSendAudio}
-                    onOpenInfo={() => setShowGroupInfo(true)}
-                    onCall={() => startCall(true)}
-                    presence={presences[activeChat.id]}
-                />
-                
-             </div>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center border-b-[6px] border-[#00a884] bg-[#222e35] text-[#e9edef]">
-                <div className="max-w-[560px] text-center">
-                    <img 
-                        src="https://static.whatsapp.net/rsrc.php/v3/y6/r/wa66945d.svg" 
-                        alt="WhatsApp Web" 
-                        className="w-[300px] mx-auto mb-10 opacity-60 filter invert grayscale"
-                    />
-                    <h1 className="text-3xl font-light text-[#e9edef] mb-5">WhatsApp Web Real</h1>
-                    <p className="text-[#8696a0] text-sm leading-6">
-                        Send and receive messages without keeping your phone online.<br/>
-                        Connected to Baileys Backend.
-                    </p>
+          <Routes>
+            <Route path="/" element={
+                 <div className="flex-1 flex flex-col items-center justify-center border-b-[6px] border-[#00a884] bg-[#222e35] text-[#e9edef]">
+                    <div className="max-w-[560px] text-center">
+                        <img
+                            src="https://static.whatsapp.net/rsrc.php/v3/y6/r/wa66945d.svg"
+                            alt="WhatsApp Web"
+                            className="w-[300px] mx-auto mb-10 opacity-60 filter invert grayscale"
+                        />
+                        <h1 className="text-3xl font-light text-[#e9edef] mb-5">WhatsApp Web Real</h1>
+                        <p className="text-[#8696a0] text-sm leading-6">
+                            Send and receive messages without keeping your phone online.<br/>
+                            Connected to Baileys Backend.
+                        </p>
+                    </div>
                 </div>
-            </div>
-          )}
+            } />
+
+            <Route path="/chat/:jid" element={
+                activeChat ? (
+                    <div className="flex-1 flex flex-col relative">
+                        <ChatWindow
+                            chat={activeChat}
+                            onBack={handleBack}
+                            onSendMessage={handleSendMessage}
+                            onSendImage={handleSendImage}
+                            onSendAudio={handleSendAudio}
+                            onOpenInfo={() => setShowGroupInfo(true)}
+                            onCall={() => startCall(true)}
+                            presence={presences[activeChat.id]}
+                        />
+                    </div>
+                ) : (
+                    <div className="flex-1 flex items-center justify-center text-[#8696a0]">Loading chat...</div>
+                )
+            } />
+
+            <Route path="/status" element={<div className="flex-1 bg-[#111b21] md:bg-[#222e35]"></div>} />
+            <Route path="/profile" element={<div className="flex-1 bg-[#111b21] md:bg-[#222e35]"></div>} />
+            <Route path="/settings" element={<div className="flex-1 bg-[#111b21] md:bg-[#222e35]"></div>} />
+            <Route path="/calls" element={<div className="flex-1 bg-[#111b21] md:bg-[#222e35]"></div>} />
+            <Route path="/new" element={<div className="flex-1 bg-[#111b21] md:bg-[#222e35]"></div>} />
+
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
           
           {activeChat && showGroupInfo && (
               <GroupInfo 
@@ -501,7 +577,6 @@ const App: React.FC = () => {
                   onEndCall={endCall}
                   stream={activeCall.localStream}
                   onAnswer={() => {
-                      // Logic to answer: would involve getting local stream and sending signal
                       startCall(activeCall.isVideo);
                   }}
               />

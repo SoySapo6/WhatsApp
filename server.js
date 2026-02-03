@@ -7,7 +7,8 @@ const {
   makeInMemoryStore,
   getContentType,
   downloadContentFromMessage,
-  isJidBroadcast
+  isJidBroadcast,
+  isJidNewsletter
 } = Baileys;
 const { Boom } = require('@hapi/boom');
 const express = require('express');
@@ -37,6 +38,7 @@ const io = new Server(server, {
 
 let sock;
 let lastQr = null;
+const ppCache = new Map();
 
 async function getMedia(msg) {
     const msgType = getContentType(msg.message);
@@ -108,6 +110,14 @@ async function connectToWhatsApp() {
       });
   });
 
+  const isExcluded = (jid) => {
+      if (!jid) return true;
+      if (isJidBroadcast(jid)) return true;
+      if (jid === 'status@broadcast') return true;
+      if (jid.endsWith('@newsletter')) return true;
+      return false;
+  };
+
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
     
@@ -142,7 +152,7 @@ async function connectToWhatsApp() {
       io.emit('ready', user);
       
       const chats = store.chats.all()
-        .filter(c => !isJidBroadcast(c.id) && c.id !== 'status@broadcast')
+        .filter(c => !isExcluded(c.id))
         .map(chat => {
             const contact = store.contacts[chat.id];
             return {
@@ -163,7 +173,9 @@ async function connectToWhatsApp() {
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type === 'notify' || type === 'append') {
       for (const msg of messages) {
-        const isStatus = isJidBroadcast(msg.key.remoteJid);
+        if (isExcluded(msg.key.remoteJid) && msg.key.remoteJid !== 'status@broadcast') continue;
+
+        const isStatus = msg.key.remoteJid === 'status@broadcast';
         
         let mediaData = null;
         try {
@@ -215,6 +227,43 @@ async function connectToWhatsApp() {
       io.emit('chats', formatted);
   });
 
+  sock.ev.on('chats.set', ({ chats }) => {
+      const formatted = chats.filter(c => !isExcluded(c.id)).map(chat => {
+          const contact = store.contacts[chat.id];
+          return {
+              ...chat,
+              name: chat.name || chat.subject || contact?.name || contact?.notify || chat.id.split('@')[0]
+          };
+      });
+      io.emit('chats', formatted);
+  });
+
+  sock.ev.on('contacts.set', ({ contacts }) => {
+      const formatted = contacts.map(c => ({
+          ...c,
+          name: c.name || c.notify || c.id.split('@')[0]
+      }));
+      io.emit('contacts', formatted);
+  });
+
+  sock.ev.on('messaging-history.set', ({ chats, contacts, messages, isLatest }) => {
+      console.log(`History Sync: ${chats.length} chats, ${contacts.length} contacts, ${messages.length} messages`);
+      const formattedChats = chats.filter(c => !isExcluded(c.id)).map(chat => {
+          const contact = contacts.find(con => con.id === chat.id) || store.contacts[chat.id];
+          return {
+              ...chat,
+              name: chat.name || chat.subject || contact?.name || contact?.notify || chat.id.split('@')[0]
+          };
+      });
+      io.emit('chats', formattedChats);
+
+      const formattedContacts = contacts.map(c => ({
+          ...c,
+          name: c.name || c.notify || c.id.split('@')[0]
+      }));
+      io.emit('contacts', formattedContacts);
+  });
+
   sock.ev.on('contacts.upsert', (contacts) => {
       const formatted = contacts.map(c => ({
           ...c,
@@ -243,7 +292,7 @@ io.on('connection', (socket) => {
           name: sock.user.name || 'Me' 
       });
       const chats = store.chats.all()
-        .filter(c => !isJidBroadcast(c.id) && c.id !== 'status@broadcast')
+        .filter(c => !isExcluded(c.id))
         .sort((a,b) => (b.conversationTimestamp || 0) - (a.conversationTimestamp || 0))
         .map(chat => {
             const contact = store.contacts[chat.id];
@@ -274,8 +323,12 @@ io.on('connection', (socket) => {
 
   socket.on('get_profile_pic', async (jid) => {
       if (!sock) return;
+      if (ppCache.has(jid)) {
+          return socket.emit('profile_pic', { jid, url: ppCache.get(jid) });
+      }
       try {
           const url = await sock.profilePictureUrl(jid, 'image').catch(() => null);
+          if (url) ppCache.set(jid, url);
           socket.emit('profile_pic', { jid, url });
       } catch (e) {
           socket.emit('profile_pic', { jid, url: null });
@@ -492,6 +545,13 @@ io.on('connection', (socket) => {
   socket.on("end_call", () => {
       socket.broadcast.emit("call_ended");
   });
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
 const PORT = process.env.PORT || 3001;
